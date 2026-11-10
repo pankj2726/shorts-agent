@@ -17,6 +17,32 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+def _load_env_file() -> None:
+    from pathlib import Path
+    candidates = [
+        Path(r"C:\Secrets\shorts-agent.env"),
+        Path(r"C:\Secrets\.env"),
+        Path(__file__).parent.parent.parent / ".env",
+        Path(".env"),
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            try:
+                with open(candidate, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith("#") or "=" not in line:
+                            continue
+                        k, v = line.split("=", 1)
+                        k, v = k.strip(), v.strip().strip('"').strip("'")
+                        if k and not os.environ.get(k):
+                            os.environ[k] = v
+            except Exception:
+                pass
+            break
+
+_load_env_file()
+
 _last_send_ts: float = 0.0
 _MIN_INTERVAL = 1.1  # seconds between Telegram messages
 

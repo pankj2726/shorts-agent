@@ -47,16 +47,17 @@ def _ms_to_ass_time(ms: int) -> str:
 
 
 def _parse_vtt_timestamp(ts_str: str) -> int:
-    """Convert HH:MM:SS.mmm or MM:SS.mmm into milliseconds."""
-    parts = ts_str.strip().split(":")
+    """Convert HH:MM:SS.mmm or HH:MM:SS,mmm or MM:SS.mmm into milliseconds."""
+    ts_str = ts_str.strip().replace(",", ".")
+    parts = ts_str.split(":")
     if len(parts) == 3:
         h, m, rest = parts
         s, ms = rest.split(".")
-        return int(h) * 3600000 + int(m) * 60000 + int(s) * 1000 + int(ms)
+        return int(h) * 3600000 + int(m) * 60000 + int(s) * 1000 + int(ms[:3].ljust(3, "0"))
     elif len(parts) == 2:
         m, rest = parts
         s, ms = rest.split(".")
-        return int(m) * 60000 + int(s) * 1000 + int(ms)
+        return int(m) * 60000 + int(s) * 1000 + int(ms[:3].ljust(3, "0"))
     return 0
 
 

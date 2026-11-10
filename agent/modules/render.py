@@ -100,18 +100,20 @@ def _write_concat(clip_paths: list[str], duration_s: float, out_file: Path) -> N
     total = 0.0
     while total < duration_s + 2:
         for cp in clip_paths:
-            lines.append(f"file '{cp}'\n")
-            total += 5  # rough estimate per clip segment
+            posix_path = Path(cp).as_posix()
+            lines.append(f"file '{posix_path}'\n")
+            total += 3.0  # rough estimate per clip segment
             if total >= duration_s + 2:
                 break
     out_file.write_text("".join(lines), encoding="utf-8")
 
 
 def _ffmpeg_assemble(concat_file: Path, audio_path: str, out: Path, duration_s: float) -> None:
+    safe_concat = str(concat_file.resolve()).replace("\\", "/")
     cmd = [
         "ffmpeg", "-y",
-        "-f", "concat", "-safe", "0", "-i", str(concat_file),
-        "-i", audio_path,
+        "-f", "concat", "-safe", "0", "-i", safe_concat,
+        "-i", str(Path(audio_path).resolve()),
         "-map", "0:v:0", "-map", "1:a:0",
         "-t", str(duration_s + 0.5),
         "-vf", f"scale={TARGET_W}:{TARGET_H}:force_original_aspect_ratio=increase,"
@@ -130,7 +132,7 @@ def _ffmpeg_normalize(video: Path, music: Optional[dict], out: Path) -> None:
         cmd = [
             "ffmpeg", "-y",
             "-i", str(video),
-            "-i", music["local_path"],
+            "-i", str(Path(music["local_path"]).resolve()),
             "-filter_complex",
             f"[1:a]volume=0.08[bg];[0:a][bg]amix=inputs=2:duration=first[amix];"
             f"[amix]loudnorm=I={TARGET_LUFS}:TP=-1.5:LRA=11[a_out]",
@@ -150,14 +152,23 @@ def _ffmpeg_normalize(video: Path, music: Optional[dict], out: Path) -> None:
 
 
 def _ffmpeg_burn_captions(video: Path, vtt_path: str, out: Path) -> None:
-    """Burn subtitles from VTT into the video using ffmpeg subtitles filter."""
-    # Build font style: large, bold, contrasting
-    font_arg = f"FontName=Noto Sans,FontSize=18,Bold=1,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,Outline=2,MarginV=80"
-    if Path(FONT_PATH).exists():
-        font_arg = f"FontFile={FONT_PATH}," + font_arg
+    """Burn kinetic subtitles from ASS or VTT into the video using ffmpeg subtitles filter."""
+    sub_file = Path(vtt_path)
+    # Prefer kinetic ASS subtitles if possible
+    try:
+        from agent.modules import captions
+        ass_path = sub_file.with_suffix(".ass")
+        captions.vtt_to_ass(sub_file, ass_path)
+        if ass_path.exists():
+            sub_file = ass_path
+    except Exception as e:
+        logger.warning("render: could not build ASS captions (%s), falling back to raw VTT", e)
+
+    # Escape path for ffmpeg filtergraph syntax on Windows
+    esc_path = str(sub_file.resolve()).replace("\\", "/").replace(":", r"\:")
     cmd = [
         "ffmpeg", "-y", "-i", str(video),
-        "-vf", f"subtitles={vtt_path}:force_style='{font_arg}'",
+        "-vf", f"subtitles='{esc_path}'",
         "-c:v", "libx264", "-preset", "fast", "-crf", "23",
         "-c:a", "copy",
         str(out),

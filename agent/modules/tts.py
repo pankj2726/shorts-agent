@@ -23,19 +23,32 @@ VOICE_MAP = {
 }
 
 
-async def _edge_tts_generate(text: str, voice: str, out_audio: Path, out_vtt: Path) -> None:
-    """Generate audio + word-boundary WebVTT file using edge-tts."""
+async def _edge_tts_generate(text: str, voice: str, out_audio: Path, out_vtt: Path) -> list[dict]:
+    """Generate audio + word-boundary subtitle file using edge-tts."""
     import edge_tts  # type: ignore
-    communicate = edge_tts.Communicate(text, voice)
+    communicate = edge_tts.Communicate(text, voice, boundary="WordBoundary")
     sub_maker = edge_tts.SubMaker()
     with open(out_audio, "wb") as audio_file:
         async for chunk in communicate.stream():
             if chunk["type"] == "audio":
                 audio_file.write(chunk["data"])
-            elif chunk["type"] == "WordBoundary":
-                sub_maker.create_sub((chunk["offset"], chunk["duration"]), chunk["text"])
+            elif chunk["type"] in ("WordBoundary", "SentenceBoundary"):
+                sub_maker.feed(chunk)
+
+    srt_content = sub_maker.get_srt()
+    vtt_content = "WEBVTT\n\n" + srt_content.replace(",", ".")
     with open(out_vtt, "w", encoding="utf-8") as vtt_file:
-        vtt_file.write(sub_maker.generate_subs())
+        vtt_file.write(vtt_content)
+
+    # Return structured word timings directly from sub_maker cues
+    timings = []
+    for cue in sub_maker.cues:
+        start_ms = int(cue.start.total_seconds() * 1000)
+        end_ms = int(cue.end.total_seconds() * 1000)
+        word = cue.content.strip()
+        if word:
+            timings.append({"word": word, "start_ms": start_ms, "end_ms": end_ms})
+    return timings
 
 
 def generate_voiceover(
@@ -65,17 +78,17 @@ def generate_voiceover(
     vtt_path = output_dir / f"{prefix}_captions.vtt"
 
     logger.info("tts: generating with voice=%s", voice)
+    word_timings = []
     try:
-        asyncio.run(_edge_tts_generate(script, voice, audio_path, vtt_path))
-        logger.info("tts: edge-tts done: %s", audio_path)
+        word_timings = asyncio.run(_edge_tts_generate(script, voice, audio_path, vtt_path))
+        logger.info("tts: edge-tts done: %s (%d word timings)", audio_path, len(word_timings))
     except Exception as e:
         logger.error("tts: edge-tts failed: %s — trying pyttsx3 fallback", e)
         _pyttsx3_fallback(script, audio_path)
         vtt_path = None  # pyttsx3 has no word timestamps
 
-    # Parse VTT for word timings
-    word_timings = []
-    if vtt_path and Path(vtt_path).exists():
+    # If VTT exists but word_timings was empty, fallback parse
+    if not word_timings and vtt_path and Path(vtt_path).exists():
         word_timings = _parse_vtt(vtt_path)
 
     # Get audio duration

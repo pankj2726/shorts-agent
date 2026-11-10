@@ -62,10 +62,11 @@ def _fetch_pollinations_motion_clip(keyword: str, output_dir: Path, video_id: in
         import subprocess
         import urllib.parse
         clean_kw = keyword.strip()
+        safe_name = "".join(c if c.isalnum() else "_" for c in clean_kw[:15]).strip("_") or "scene"
         encoded = urllib.parse.quote(f"cinematic vertical photography, {clean_kw}, high quality, 9:16 portrait")
         img_url = f"https://image.pollinations.ai/prompt/{encoded}?width=1080&height=1920&nologo=true"
-        img_path = output_dir / f"scene_{video_id}_{clean_kw[:15].replace(' ', '_')}.jpg"
-        clip_path = output_dir / f"motion_{video_id}_{clean_kw[:15].replace(' ', '_')}.mp4"
+        img_path = output_dir / f"scene_{video_id}_{safe_name}.jpg"
+        clip_path = output_dir / f"motion_{video_id}_{safe_name}.mp4"
 
         _download(img_url, img_path)
         if not img_path.exists() or img_path.stat().st_size < 1000:
@@ -94,7 +95,8 @@ def _fetch_pollinations_motion_clip(keyword: str, output_dir: Path, video_id: in
 def _generate_procedural_clip(keyword: str, output_dir: Path, video_id: int) -> dict:
     """Fallback solid/gradient background clip via ffmpeg."""
     import subprocess
-    clip_path = output_dir / f"proc_{video_id}_{keyword[:10].replace(' ', '_')}.mp4"
+    safe_name = "".join(c if c.isalnum() else "_" for c in keyword[:15]).strip("_") or "scene"
+    clip_path = output_dir / f"proc_{video_id}_{safe_name}.mp4"
     colors = ["#1e1e2e", "#0f172a", "#18181b", "#1a1a2e", "#16213e"]
     color = random.choice(colors)
     cmd = [
