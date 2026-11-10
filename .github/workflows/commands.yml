@@ -27,6 +27,11 @@ jobs:
       - name: Install deps
         run: pip install -r requirements.txt
 
+      - name: Unpack ENV_FILE if provided
+        if: "${{ secrets.ENV_FILE != '' }}"
+        run: |
+          echo "${{ secrets.ENV_FILE }}" > .env
+
       - name: Process Telegram commands
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}

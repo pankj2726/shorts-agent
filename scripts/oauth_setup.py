@@ -19,6 +19,26 @@ Usage:
 import json
 import os
 import sys
+from pathlib import Path
+
+def _load_env_file() -> None:
+    for candidate in [Path(__file__).parent.parent / ".env", Path(".env")]:
+        if candidate.exists():
+            try:
+                with open(candidate, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith("#") or "=" not in line:
+                            continue
+                        k, v = line.split("=", 1)
+                        k, v = k.strip(), v.strip().strip('"').strip("'")
+                        if k and not os.environ.get(k):
+                            os.environ[k] = v
+            except Exception:
+                pass
+            break
+
+_load_env_file()
 
 SCOPES = [
     "https://www.googleapis.com/auth/youtube.upload",

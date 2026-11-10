@@ -39,6 +39,8 @@
     - `scripts/oauth_setup.py`: Interactive one-time Desktop OAuth 2.0 refresh token generator.
     - `scripts/smoke_test.py`: Full integration test suite.
     - `requirements.txt`, `README.md`, `CHANGELOG.md`, `.gitignore`.
+  - Local Git repository initialized on `main` branch with remote origin `https://github.com/pankj2726/shorts-agent.git`.
+  - Initial commit created (commit `f5f25bc`, 35 files) and successfully pushed to GitHub repository `main` branch. All workflows, modules, scripts, and documentation are live on GitHub.
 
 ---
 
