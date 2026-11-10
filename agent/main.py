@@ -17,7 +17,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 def _load_env_file() -> None:
-    for candidate in [Path(__file__).parent.parent / ".env", Path(".env")]:
+    candidates = [
+        Path(r"C:\Secrets\shorts-agent.env"),
+        Path(r"C:\Secrets\.env"),
+        Path(__file__).parent.parent / ".env",
+        Path(".env"),
+    ]
+    for candidate in candidates:
         if candidate.exists():
             try:
                 with open(candidate, "r", encoding="utf-8") as f:
@@ -312,19 +318,23 @@ def run_smoke() -> None:
     except Exception as e:
         errors.append(f"Gemini: {e}")
 
-    # 2. Pexels
-    try:
-        import requests
-        resp = requests.get(
-            "https://api.pexels.com/videos/search",
-            headers={"Authorization": os.environ.get("PEXELS_API_KEY", "")},
-            params={"query": "office", "per_page": 1},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        logger.info("smoke: Pexels OK (%d results)", resp.json().get("total_results", 0))
-    except Exception as e:
-        errors.append(f"Pexels: {e}")
+    # 2. Visual Assets (Pexels or No-Key Fallback)
+    pexels_key = os.environ.get("PEXELS_API_KEY", "").strip()
+    if pexels_key:
+        try:
+            import requests
+            resp = requests.get(
+                "https://api.pexels.com/videos/search",
+                headers={"Authorization": pexels_key},
+                params={"query": "office", "per_page": 1},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            logger.info("smoke: Pexels API OK (%d results)", resp.json().get("total_results", 0))
+        except Exception as e:
+            errors.append(f"Pexels: {e}")
+    else:
+        logger.info("smoke: Pexels API key omitted — using zero-key AI image/motion fallback (Pollinations + Procedural)")
 
     # 3. edge-tts
     try:

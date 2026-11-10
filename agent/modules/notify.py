@@ -121,6 +121,8 @@ def _send_text(base_url: str, chat_id: str, text: str, reply_markup: dict | None
     if reply_markup:
         body["reply_markup"] = reply_markup
     resp = requests.post(f"{base_url}/sendMessage", json=body, timeout=15)
+    if resp.status_code != 200:
+        logger.warning("notify: Telegram response error: %s", resp.text)
     resp.raise_for_status()
 
 

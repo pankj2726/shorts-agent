@@ -27,9 +27,9 @@ logger = logging.getLogger(__name__)
 
 # ─── Model config ─────────────────────────────────────────────────────────────
 
-GEMINI_MODEL = "gemini-2.0-flash-exp"          # free tier Flash
-GROQ_MODEL = "llama-3.1-70b-versatile"         # 1k req/day free
-GROQ_FAST_MODEL = "llama-3.1-8b-instant"       # 14.4k req/day free
+GEMINI_MODEL = "gemini-flash-lite-latest"       # free tier Flash (high reliability)
+GROQ_MODEL = "openai/gpt-oss-120b"              # 120B model on Groq
+GROQ_FAST_MODEL = "qwen/qwen3.8-27b"            # Fast Groq model
 OPENROUTER_MODEL = "meta-llama/llama-3.1-70b-instruct:free"
 
 _MAX_RETRIES = 3
@@ -122,24 +122,42 @@ class _RateLimited(Exception):
 
 
 def _gemini(prompt: str, system: str | None, temperature: float, max_tokens: int) -> str:
-    import google.generativeai as genai  # type: ignore
+    key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not key:
+        raise LLMError("GEMINI_API_KEY is empty")
 
-    genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-    model = genai.GenerativeModel(
-        GEMINI_MODEL,
-        system_instruction=system or "",
-    )
-    cfg = genai.GenerationConfig(temperature=temperature, max_output_tokens=max_tokens)
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={key}"
+    payload: dict = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "temperature": temperature,
+            "maxOutputTokens": max_tokens,
+        },
+    }
+    if system:
+        payload["system_instruction"] = {"parts": [{"text": system}]}
 
     @retry(
-        retry=retry_if_exception_type(Exception),
+        retry=retry_if_exception_type(requests.exceptions.RequestException),
         stop=stop_after_attempt(_MAX_RETRIES),
         wait=wait_exponential(multiplier=1, min=_BACKOFF_MIN, max=_BACKOFF_MAX),
         reraise=True,
     )
     def _call() -> str:
-        response = model.generate_content(prompt, generation_config=cfg)
-        return response.text
+        resp = requests.post(url, json=payload, timeout=30)
+        if resp.status_code == 429:
+            raise _RateLimited(resp.text)
+        if resp.status_code != 200:
+            if resp.status_code == 404:
+                # Fallback to gemini-2.0-flash if 1.5-flash not found
+                alt_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={key}"
+                r2 = requests.post(alt_url, json=payload, timeout=30)
+                if r2.status_code == 200:
+                    return r2.json()["candidates"][0]["content"]["parts"][0]["text"]
+            logger.warning("llm: Gemini error: %s", resp.text[:300])
+            resp.raise_for_status()
+        data = resp.json()
+        return data["candidates"][0]["content"]["parts"][0]["text"]
 
     try:
         return _call()
