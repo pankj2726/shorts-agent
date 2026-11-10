@@ -1,0 +1,64 @@
+name: Analytics
+
+on:
+  schedule:
+    # 15:00 UTC = 20:30 IST — daily digest
+    - cron: '0 15 * * *'
+    # Monday 06:00 UTC = 11:30 IST — weekly report
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      report_type:
+        description: 'daily or weekly'
+        required: false
+        default: 'daily'
+
+env:
+  TZ: Asia/Kolkata
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  analytics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Restore state DB
+        uses: actions/cache@v4
+        with:
+          path: agent/state/db.sqlite
+          key: sqlite-state-${{ github.run_id }}
+          restore-keys: sqlite-state-
+
+      - name: Run analytics
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          YT_API_KEY: ${{ secrets.YT_API_KEY }}
+          YT_CHANNEL_ID: ${{ vars.YT_CHANNEL_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          REPORT_TYPE: ${{ github.event.inputs.report_type || 'daily' }}
+          GH_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: python -m agent.main analytics
+
+      - name: Save state DB
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: agent/state/db.sqlite
+          key: sqlite-state-${{ github.run_id }}

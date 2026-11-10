@@ -1,0 +1,38 @@
+name: Telegram Commands
+
+on:
+  schedule:
+    # Poll every 10 minutes for /status /pause /resume
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+env:
+  TZ: Asia/Kolkata
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  commands:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Process Telegram commands
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PAUSE_PUBLISHING: ${{ vars.PAUSE_PUBLISHING }}
+          GH_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: python -m agent.main commands

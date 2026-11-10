@@ -1,0 +1,69 @@
+name: Engage (Comments)
+
+on:
+  schedule:
+    # 03:30 UTC = 09:00 IST
+    - cron: '30 3 * * *'
+    # 10:30 UTC = 16:00 IST
+    - cron: '30 10 * * *'
+  workflow_dispatch:
+
+env:
+  TZ: Asia/Kolkata
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  engage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Restore state DB
+        uses: actions/cache@v4
+        with:
+          path: agent/state/db.sqlite
+          key: sqlite-state-${{ github.run_id }}
+          restore-keys: sqlite-state-
+
+      - name: Check kill switch
+        env:
+          PAUSE_PUBLISHING: ${{ vars.PAUSE_PUBLISHING }}
+        run: |
+          if [ "$PAUSE_PUBLISHING" = "true" ]; then
+            echo "PAUSE_PUBLISHING=true — engagement paused."
+            exit 0
+          fi
+
+      - name: Run comment engagement
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          YT_CHANNEL_ID: ${{ vars.YT_CHANNEL_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          MAX_REPLIES_PER_DAY: ${{ vars.MAX_REPLIES_PER_DAY }}
+          APPROVAL_REQUIRED: ${{ vars.APPROVAL_REQUIRED }}
+          PAUSE_PUBLISHING: ${{ vars.PAUSE_PUBLISHING }}
+          GH_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: python -m agent.main engage
+
+      - name: Save state DB
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: agent/state/db.sqlite
+          key: sqlite-state-${{ github.run_id }}

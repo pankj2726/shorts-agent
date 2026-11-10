@@ -1,0 +1,44 @@
+# Environment variables and secrets (NEVER commit secrets)
+.env
+.env.*
+*.key
+*.pem
+*.jks
+*.p12
+*.pfx
+rclone.conf
+service-account*.json
+
+# SQLite local databases and write-ahead logs
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+*.db-wal
+agent/state/*.sqlite
+
+# Python caches and virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
+# Rendered and temporary media outputs
+*.mp4
+*.mp3
+*.wav
+*.aac
+*.vtt
+*.ass
+*.srt
+temp/
+tmp/
+_tmp*/
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
