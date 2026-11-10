@@ -13,7 +13,33 @@ import json
 import logging
 import os
 import time
+from pathlib import Path
 from typing import Any
+
+def _load_env_file() -> None:
+    candidates = [
+        Path(r"C:\Secrets\shorts-agent.env"),
+        Path(r"C:\Secrets\.env"),
+        Path(__file__).parent.parent.parent / ".env",
+        Path(".env"),
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            try:
+                with open(candidate, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith("#") or "=" not in line:
+                            continue
+                        k, v = line.split("=", 1)
+                        k, v = k.strip(), v.strip().strip('"').strip("'")
+                        if k and not os.environ.get(k):
+                            os.environ[k] = v
+            except Exception:
+                pass
+            break
+
+_load_env_file()
 
 import requests
 from tenacity import (
@@ -47,7 +73,7 @@ def complete(
     prompt: str,
     system: str | None = None,
     temperature: float = 0.7,
-    max_tokens: int = 1024,
+    max_tokens: int = 4096,
 ) -> str:
     """
     Return a text completion. Tries Gemini → Groq → OpenRouter on 429/failure.
@@ -92,27 +118,41 @@ def complete_json(
     prompt: str,
     system: str | None = None,
     temperature: float = 0.3,
-    max_tokens: int = 2048,
+    max_tokens: int = 4096,
 ) -> Any:
     """
     Like complete() but parses the response as JSON.
     Strips markdown code fences if present.
+    Retries or fails over if invalid JSON is received.
     """
-    raw = complete(prompt, system=system, temperature=temperature, max_tokens=max_tokens)
-    text = raw.strip()
-    # Strip ```json ... ``` fences
-    if text.startswith("```"):
-        lines = text.splitlines()
-        # Drop first and last fence line
-        if lines[0].startswith("```"):
-            lines = lines[1:]
-        if lines and lines[-1].strip() == "```":
-            lines = lines[:-1]
-        text = "\n".join(lines)
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise LLMError(f"LLM returned non-JSON: {exc}\nRaw: {text[:500]}") from exc
+    providers = []
+    if os.environ.get("GEMINI_API_KEY"):
+        providers.append(("Gemini", _gemini))
+    if os.environ.get("GROQ_API_KEY"):
+        providers.append(("Groq", _groq))
+    if os.environ.get("OPENROUTER_API_KEY"):
+        providers.append(("OpenRouter", _openrouter))
+
+    last_exc = None
+    for name, provider_fn in providers:
+        for attempt in range(2):
+            try:
+                raw = provider_fn(prompt, system, temperature, max_tokens)
+                text = raw.strip()
+                if text.startswith("```"):
+                    lines = text.splitlines()
+                    if lines[0].startswith("```"):
+                        lines = lines[1:]
+                    if lines and lines[-1].strip() == "```":
+                        lines = lines[:-1]
+                    text = "\n".join(lines).strip()
+                return json.loads(text)
+            except Exception as exc:
+                last_exc = exc
+                logger.warning("llm: %s JSON attempt %d failed: %s", name, attempt + 1, exc)
+                time.sleep(1)
+
+    raise LLMError(f"All providers failed to produce valid JSON: {last_exc}")
 
 
 # ─── Provider implementations ─────────────────────────────────────────────────

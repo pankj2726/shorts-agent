@@ -1,38 +1,41 @@
 # Channel Bible
 
-> Update this file after every weekly learning report. The Strategist and Scriptwriter must read it before every task.
+> The Strategist and Scriptwriter must read this file before generating any idea or script.
 
 ## Identity
-- **Channel name:** (set after Phase 0 niche decision)
-- **Niche:** (set after Phase 0 — e.g., Excel & workplace finance for India)
-- **Language:** (set after Phase 0 — en / hi / hinglish)
-- **Target viewer:** Working professional or student aged 18–35, curious, time-poor, wants fast actionable value.
-- **Tone:** Confident, friendly, slightly surprising. Never lecturing. No cringe humour.
-- **Format default:** Single-topic Short, 25–40 s, one idea explained well.
+- **Channel name:** QuickTech Hacks
+- **Niche:** Tech & Workplace Productivity Hacks
+- **Language:** English (`en`)
+- **Target viewer:** Working professionals, students, and digital creators aged 18–35 who want fast, high-impact, actionable value without fluff.
+- **Tone:** Confident, crisp, punchy, and practical. Never lecturing, no corporate jargon, no cringey intros.
+- **Format default:** Single-topic Short, 25–40 seconds (70–110 words), exactly one high-value insight explained clearly.
 
-## Content rules
-1. Every Short must have exactly ONE insight the viewer didn't know before.
-2. The first frame already shows motion or a bold caption. No logo intro. No black frames. No "hi guys".
-3. Voice starts at 0.0 s. No silence at the start.
-4. Every claim must have a named source. If unsure, drop the claim.
-5. No medical, legal or investment advice stated as certain.
-6. No real person's likeness or voice without written consent.
-7. No copyrighted footage or music. Only licensed stock and CC0 music.
-8. Disclose AI-generated realistic content per YouTube policy (mandatory since 4 Feb 2026).
-9. Never copy another creator's script. Use competitor videos only for topic and angle signals.
-10. No hate speech, misinformation, or policy-violating content.
+## Content Rules
+1. **One Core Insight:** Every Short must deliver exactly ONE distinct superpower or solution the viewer can use immediately.
+2. **Instant Hook:** The first frame starts with motion and high-contrast text. No "Hey guys", no logo animation, no channel introduction. Voiceover starts at 0.0 seconds.
+3. **Pacing:** Cut visual and idea transitions every 2–3 seconds. Eliminate every unnecessary word.
+4. **Accuracy & Sourcing:** Every statistic or quantitative claim must cite a credible source. If unverified, remove the claim.
+5. **Policy Boundaries:** Strictly follow `banned_topics.md`. No financial advice ("you should invest"), no medical claims, no copyright infringement.
+6. **Retention Loop:** The ending sentence must seamlessly connect back to the opening hook to encourage replay completion.
+7. **Engagement Prompt:** Conclude with one genuine question that sparks natural debate or answers in the comments (never "comment YES").
+8. **Synthetic Content Disclosure:** Set `contains_synthetic=true` whenever realistic synthetic video assets or photoreal AI elements are used.
 
-## Recurring series ideas (placeholder — fill in after niche chosen)
-- Series A: "One Excel trick in 30 seconds"
-- Series B: "Psychology fact that changes how you work"
-- Series C: "AI tool you haven't heard of"
+## Recurring Series Formats
+- **Series 1: "PC & Windows Superpowers"** — Hidden OS features, keyboard shortcuts, and workflow speedups.
+- **Series 2: "Free AI Multipliers"** — Free tools and web apps that automate repetitive digital tasks in seconds.
+- **Series 3: "Focus & Productivity Systems"** — Science-backed workplace psychology (e.g., 2-minute rule, friction reduction, Parkinson's Law).
 
-## 10 Reference channels (placeholder — fill in after niche chosen)
-1. (channel name + ID)
-2. ...
+## 10 Reference Competitor Channels
+1. `@JeffSu` (Workplace tech & productivity systems)
+2. `@KevinStratvert` (Actionable PC and software tutorials)
+3. `@howtotech` (Windows and browser shortcuts)
+4. `@aliabdaal` (Productivity frameworks & tools)
+5. `@Simpletivity` (Time management and app tips)
+6. `@TheProductivityShow` (Workflow efficiency hacks)
+7. `@ModernTechOfficial` (OS tricks and utility software)
+8. `@LeilaHormozi` (Focus mechanics & deep work)
+9. `@MattDAvella` (Digital habits and productivity routines)
+10. `@LiamPorritt` (Deep work and task execution)
 
-## Banned topics
+## Banned Topics
 See `banned_topics.md`.
-
-## Learnings applied (auto-updated by Analyst)
-- (empty — will be filled from learnings.md each week)

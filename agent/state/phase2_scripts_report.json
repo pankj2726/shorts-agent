@@ -1,0 +1,306 @@
+{
+  "ideas_count": 30,
+  "scripts": [
+    {
+      "video_id": 1,
+      "idea_id": 9,
+      "title": "Windows File Preview Hack: Instant Quick Look Shortcut",
+      "description": "Stop wasting time double-clicking files on Windows. Use this hidden PowerToys Peek shortcut to preview documents instantly.\n\n#WindowsHacks #ProductivityTips #TechHacks #Shorts",
+      "tags": [
+        "powertoys",
+        "shortcuts",
+        "computers",
+        "efficiency",
+        "software"
+      ],
+      "script": "Windows users have been opening files completely wrong for years. Stop double-clicking everything when you can preview any document, image, or PDF instantly. Just download Microsoft PowerToys, select your file, and press Control plus Spacebar. It brings the famous Mac Quick Look feature straight to Windows without launching heavy apps. How many unnecessary folders do you click through every single day?",
+      "contains_synthetic": false
+    },
+    {
+      "video_id": 2,
+      "idea_id": 1,
+      "title": "Windows Clipboard History Shortcut You Need",
+      "description": "Unlock your hidden Windows clipboard history instantly with this simple keyboard shortcut.\n#WindowsHacks #Productivity #TechTips #Shorts",
+      "tags": [
+        "shortcuts",
+        "computer",
+        "efficiency",
+        "software",
+        "windows11"
+      ],
+      "script": "Your PC is hiding a secret clipboard vault. Stop re-copying the same links and text all day. Instead of pressing control V, press Windows key plus V right now. This instantly opens your entire copy history, letting you paste anything from the last week with one click. It works across every single app on Windows. How many items are still hiding in your clipboard right now?",
+      "contains_synthetic": false
+    },
+    {
+      "video_id": 3,
+      "idea_id": 2,
+      "title": "Windows Shortcut to Pin Any Window on Top",
+      "description": "Stop wasting time alt-tabbing between windows. Use this hidden Microsoft PowerToys trick to keep any app always on top.\n#ProductivityHacks #Windows11 #TechTips #Shorts",
+      "tags": [
+        "PowerToys",
+        "multitasking",
+        "shortcuts",
+        "Microsoft",
+        "efficiency"
+      ],
+      "script": "Stop alt-tabbing. Pin any app to your screen instantly. If you constantly switch windows while comparing documents or writing code, you are wasting valuable focus time. First, download the free official Microsoft PowerToys app. Next, open your target window and press Windows, Control, and T. That window now permanently floats above all others. What app will you pin first?",
+      "contains_synthetic": false
+    },
+    {
+      "video_id": 4,
+      "idea_id": 3,
+      "title": "Copy Text From Any Image on Windows Instantly",
+      "description": "Stop wasting time typing text from images and videos. Use this hidden Windows PowerToys shortcut to copy any text from your screen in one second.\n\n#WindowsHacks #Productivity #TechTips #Shorts",
+      "tags": [
+        "Windows11",
+        "PowerToys",
+        "Shortcuts",
+        "Workflow",
+        "Software"
+      ],
+      "script": "Stop typing text from images. Do this instead. Most people waste hours manually copying notes from videos, PDFs, or screenshots. Press Windows, Shift, and T on your keyboard right now. A cropping tool appears, letting you highlight any image on your display. The text is instantly copied to your clipboard, ready to paste anywhere. What document would you use this on first?",
+      "contains_synthetic": false
+    },
+    {
+      "video_id": 5,
+      "idea_id": 11,
+      "title": "NotebookLM AI: Turn PDFs Into Podcasts Instantly",
+      "description": "Learn how to use Google's free NotebookLM to turn massive documents and PDFs into custom audio podcasts in seconds.\n\n#NotebookLM #ProductivityHacks #ArtificialIntelligence #TechTips #Shorts",
+      "tags": [
+        "Google AI",
+        "document summary",
+        "audio generation",
+        "workflow automation",
+        "time saving"
+      ],
+      "script": "Stop reading 50 page reports. Turn them into a podcast instantly. Drowning in dense research papers or PDFs wastes hours of your week. Instead, upload your files to Google's NotebookLM for free. It instantly analyzes your text and generates a natural, two host audio discussion breaking down every key point. You can now absorb complex data while commuting or doing chores. How many hours of reading could you save this week if your documents talked back to you?",
+      "contains_synthetic": false
+    },
+    {
+      "video_id": 6,
+      "idea_id": 16,
+      "title": "Gamma AI: Generate Presentation Decks in 30 Seconds",
+      "description": "Stop wasting hours designing slides from scratch. Use this free AI presentation tool to instantly generate professional decks from a single prompt.\n\n#AIProductivity #GammaApp #PresentationHacks #TechHacks #Shorts",
+      "tags": [
+        "GammaApp",
+        "presentation",
+        "AI",
+        "powerpoint",
+        "workflow"
+      ],
+      "script": "This free AI builds entire presentation decks in 30 seconds. Stop wasting hours formatting boxes in PowerPoint and trying to make ugly slides look professional. Go to Gamma App, paste a single text prompt, and watch it generate custom layouts, images, and content instantly. You can tweak any block with one click or export straight to PDF and PowerPoint. What is the longest you have ever spent formatting a single slide deck?",
+      "contains_synthetic": false
+    },
+    {
+      "video_id": 7,
+      "idea_id": 12,
+      "title": "Make cheap mics sound like studio quality for free",
+      "description": "Transform cheap microphone audio into studio quality using a free AI tool. No expensive hardware needed!\n#AITools #AudioHacks #ContentCreator #Shorts",
+      "tags": [
+        "podcast",
+        "audio",
+        "editing",
+        "creator",
+        "software"
+      ],
+      "script": "Make a $10 microphone sound like a $1,000 studio setup instantly. Bad audio ruins content faster than blurry video. Adobe Podcast Enhance is a free web tool that uses AI to scrub away room echo and background noise instantly. Just drag and drop your voice recording. It rebuilds your voice frequencies so you sound like you are in a professional booth. Stop spending money on expensive hardware. Make a $10 microphone sound like a $1,000 studio setup instantly. What microphone are you currently using for your videos?",
+      "contains_synthetic": false
+    },
+    {
+      "hook": "Stop drinking afternoon coffee. Do this 10-minute reset instead.",
+      "script": "Stop drinking afternoon coffee. Do this 10-minute reset instead. Instead of caffeine, use Non-Sleep Deep Rest, or NSDR. According to Stanford neuroscientist Andrew Huberman, a 10-minute NSDR protocol restores dopamine baseline levels without the afternoon crash. Simply lie back, listen to a guided protocol, and let your nervous system flush accumulated fatigue. You get all the alertness of a full nap without the sleep inertia. What protocol helps you push through the afternoon slump?",
+      "word_count": 74,
+      "estimated_duration_s": 32,
+      "title": "Stop Afternoon Coffee Crashes With This 10-Minute Reset",
+      "description": "Beat the afternoon slump without caffeine using a science-backed NSDR protocol.\n#ProductivityHacks #EnergyBoost #DeepWork #Shorts",
+      "tags": [
+        "NSDR",
+        "focus",
+        "energy",
+        "neuroscience",
+        "workflow"
+      ],
+      "scene_list": [
+        {
+          "time_s": 0,
+          "visual": "Frustrated office worker rubbing temples in front of laptop",
+          "search_keyword": "tired professional computer"
+        },
+        {
+          "time_s": 3,
+          "visual": "Person closing eyes and leaning back in office chair",
+          "search_keyword": "office worker relaxing chair"
+        },
+        {
+          "time_s": 8,
+          "visual": "Close up of timer counting down 10 minutes",
+          "search_keyword": "digital timer countdown"
+        },
+        {
+          "time_s": 15,
+          "visual": "Brain wave animation or calm zen nature background",
+          "search_keyword": "calm mind meditation"
+        },
+        {
+          "time_s": 22,
+          "visual": "Refreshed worker typing fast on mechanical keyboard",
+          "search_keyword": "productive typing keyboard"
+        },
+        {
+          "time_s": 28,
+          "visual": "Split screen showing focus and high energy workflow",
+          "search_keyword": "focused worker screen"
+        }
+      ],
+      "caption_emphasis_words": [
+        "Stop",
+        "afternoon",
+        "coffee",
+        "10-minute",
+        "reset",
+        "NSDR",
+        "dopamine",
+        "baseline",
+        "alertness",
+        "fatigue"
+      ],
+      "cover_frame_text": "Stop Afternoon Coffee",
+      "sources": [
+        {
+          "claim": "A 10-minute Non-Sleep Deep Rest (NSDR) protocol restores dopamine baseline levels without afternoon crashes.",
+          "source": "Huberman Lab Podcast, Stanford University School of Medicine (https://www.hubermanlab.com)"
+        }
+      ],
+      "contains_synthetic": false,
+      "video_id": 8
+    },
+    {
+      "hook": "Multitasking is a scam. Here is the hidden cost.",
+      "script": "Multitasking is a scam. Here is the hidden cost. Every time you switch tasks, your brain loses twenty-three minutes refocusing, according to a University of California study. That constant context-switching slashes your actual deep work down to practically zero. Instead, batch your emails and chat apps into single blocks twice a day. What is the one app that breaks your focus the most?",
+      "word_count": 63,
+      "estimated_duration_s": 28,
+      "title": "Stop Multitasking: The Hidden Cost Exposed",
+      "description": "Stop multitasking and protect your attention span with this proven focus hack.\n\n#Productivity #TimeManagement #DeepWork #Shorts",
+      "tags": [
+        "focus",
+        "attention",
+        "workplace",
+        "efficiency",
+        "psychology"
+      ],
+      "scene_list": [
+        {
+          "time_s": 0,
+          "visual": "Frustrated office worker switching rapidly between multiple computer tabs",
+          "search_keyword": "stressed multitasking computer work"
+        },
+        {
+          "time_s": 3,
+          "visual": "Close-up of brain digital graphic flashing warning lights",
+          "search_keyword": "brain focus scan infographic"
+        },
+        {
+          "time_s": 7,
+          "visual": "Timer counting down rapidly on a modern smartphone screen",
+          "search_keyword": "timer countdown modern screen"
+        },
+        {
+          "time_s": 12,
+          "visual": "Clean, minimalist desk setup with a single open document",
+          "search_keyword": "clean minimalist desk setup"
+        },
+        {
+          "time_s": 18,
+          "visual": "Split screen showing email inbox and chat notifications being blocked",
+          "search_keyword": "notification banner blocking workflow"
+        },
+        {
+          "time_s": 24,
+          "visual": "Thoughtful professional looking directly at the camera",
+          "search_keyword": "focused professional looking at camera"
+        }
+      ],
+      "caption_emphasis_words": [
+        "scam",
+        "hidden cost",
+        "twenty-three minutes",
+        "slashes",
+        "deep work",
+        "batch"
+      ],
+      "cover_frame_text": "Multitasking Is A Scam",
+      "sources": [
+        {
+          "claim": "Every time you switch tasks, your brain loses 23 minutes refocusing",
+          "source": "University of California, Irvine (Dr. Gloria Mark research) - https://www.ics.uci.edu/~gmark/chi08-mark.pdf"
+        }
+      ],
+      "contains_synthetic": false,
+      "video_id": 9
+    },
+    {
+      "hook": "Your phone is designed to hijack your attention. Fight back.",
+      "script": "Your phone is designed to hijack your attention. Fight back. Every red notification badge acts as an intentional corporate interruption robbing your deep work time. Start by toggling off all banner alerts and sound cues for every app except direct calls. By enforcing this zero-notification baseline, studies show knowledge workers reclaim over two hours of daily focus. What is the single app stealing most of your attention today?",
+      "word_count": 68,
+      "estimated_duration_s": 32,
+      "title": "Focus Hack: Stop Phone Notifications",
+      "description": "Reclaim two hours of daily focus by instantly setting up a zero-notification baseline on your smartphone.\n\n#ProductivityHacks #DeepWork #DigitalMinimalism #Shorts",
+      "tags": [
+        "smartphone",
+        "attention",
+        "workplace",
+        "efficiency",
+        "psychology"
+      ],
+      "scene_list": [
+        {
+          "time_s": 0,
+          "visual": "Close up of smartphone screen flashing red notification badges rapidly",
+          "search_keyword": "smartphone notifications flashing"
+        },
+        {
+          "time_s": 3,
+          "visual": "Frustrated office worker looking at glowing phone in dark room",
+          "search_keyword": "stressed worker looking at phone"
+        },
+        {
+          "time_s": 9,
+          "visual": "Hand tapping settings menu and toggling off push notifications",
+          "search_keyword": "phone settings notification toggle"
+        },
+        {
+          "time_s": 15,
+          "visual": "Clean smartphone home screen with zero badge counters visible",
+          "search_keyword": "clean minimalist smartphone screen"
+        },
+        {
+          "time_s": 22,
+          "visual": "Professional working deeply focused on laptop without distractions",
+          "search_keyword": "focused professional working laptop"
+        },
+        {
+          "time_s": 29,
+          "visual": "Split screen or graphic highlighting question mark for comments",
+          "search_keyword": "question mark digital graphic"
+        }
+      ],
+      "caption_emphasis_words": [
+        "hijack",
+        "red",
+        "corporate",
+        "zero-notification",
+        "two hours",
+        "stealing"
+      ],
+      "cover_frame_text": "Stop Phone Interruptions",
+      "sources": [
+        {
+          "claim": "knowledge workers reclaim over two hours of daily focus by eliminating interruptions",
+          "source": "University of California, Irvine - Gloria Mark research on attention fragmentation (https://www.ics.uci.edu/~gmark/)"
+        }
+      ],
+      "contains_synthetic": false,
+      "video_id": 10
+    }
+  ]
+}

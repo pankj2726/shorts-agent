@@ -28,7 +28,13 @@ import webbrowser
 from pathlib import Path
 
 def _load_env_file() -> None:
-    for candidate in [Path(__file__).parent.parent / ".env", Path(".env")]:
+    candidates = [
+        Path(r"C:\Secrets\shorts-agent.env"),
+        Path(r"C:\Secrets\.env"),
+        Path(__file__).parent.parent / ".env",
+        Path(".env"),
+    ]
+    for candidate in candidates:
         if candidate.exists():
             try:
                 with open(candidate, "r", encoding="utf-8") as f:

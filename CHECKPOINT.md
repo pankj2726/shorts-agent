@@ -1,66 +1,43 @@
 # Project Checkpoint: YouTube Shorts Agent
 
-**Updated:** 2026-11-10 10:15 IST  
-**Current Phase:** Phase 1 Complete -> Ready for Phase 2 (Content Engine Tuning)
+**Updated:** 2026-11-10 15:15 IST  
+**Current Phase:** Phase 2 Complete (Content Engine) -> Ready for Phase 3 (Video Assembly & Render Verification)
 
 ---
 
 ## 1. Done
 - [x] **Phase 0 & 1 Architecture Completed:**
   - Full modular layout established under `shorts-agent/`.
-  - GitHub Actions workflows implemented:
-    - `.github/workflows/daily_pipeline.yml`: Scheduled daily end-to-end video production & publishing.
-    - `.github/workflows/engage.yml`: Twice-daily safe comment processing.
-    - `.github/workflows/analytics.yml`: Daily performance pulls & weekly learning synthesis.
-    - `.github/workflows/commands.yml`: Remote control via Telegram (`/status`, `/pause`, `/resume`).
-  - Configuration files & prompts authored:
-    - `agent/config/channel_bible.md`: Editorial rules, tone, avatar, pacing.
-    - `agent/config/hook_rules.md`: 3-second hold mechanics and retention formulas.
-    - `agent/config/banned_topics.md`: Strict policy boundaries (finance, health, copyright, misinformation).
-    - `agent/prompts/strategist.md`, `scriptwriter.md`, `comment_agent.md`.
-  - Core modules developed:
-    - `agent/modules/llm.py`: Resilient multi-provider routing (Gemini Flash -> Groq -> OpenRouter `:free`).
-    - `agent/modules/quota.py`: 10,000 unit daily YouTube API ledger with <20% auto-fail-close protection.
-    - `agent/modules/notify.py`: Telegram notifications with inline keyboard approvals and video delivery.
-    - `agent/modules/db.py`: SQLite state tracking with schema migrations.
-    - `agent/modules/research.py`: YouTube API trend & competitor playlist analysis (1 unit/call).
-    - `agent/modules/strategy.py`: Topic novelty scoring vs. past 40 published videos.
-    - `agent/modules/script.py`: 25–40s viral short scripts + metadata.
-    - `agent/modules/qa.py`: QA Gate #1 (script/policy) & QA Gate #2 (render/loudness/sync).
-    - `agent/modules/tts.py`: Microsoft edge-tts neural voice generation with word timings.
-    - `agent/modules/captions.py`: Kinetic subtitle engine with word highlights and Groq Whisper fallback.
-    - `agent/modules/assets.py`: Pexels vertical video API integration + CC0 music manager.
-    - `agent/modules/render.py`: ffmpeg composition engine (1080x1920, −14 LUFS, hardcoded subtitles).
-    - `agent/modules/publish.py`: YouTube API scheduled uploader with synthetic media disclosure.
-    - `agent/modules/comments.py`: Policy-compliant comment classifier and contextual responder.
-    - `agent/modules/analytics.py`: YouTube Analytics aggregator and `learnings.md` generator.
-    - `agent/main.py`: Central CLI orchestrator.
-  - Setup & verification scripts:
-    - `scripts/oauth_setup.py`: Interactive one-time Desktop OAuth 2.0 refresh token generator.
-    - `scripts/smoke_test.py`: Full integration test suite.
-    - `requirements.txt`, `README.md`, `CHANGELOG.md`, `.gitignore`.
-  - Local Git repository initialized on `main` branch with remote origin `https://github.com/pankj2726/shorts-agent.git`.
-  - Initial commit created (commit `f5f25bc`, 35 files) and successfully pushed to GitHub repository `main` branch. All workflows, modules, scripts, and documentation are live on GitHub.
-  - Integration smoke test passed with 100% green checks across Gemini, zero-key visual engine, edge-tts, ffmpeg, YouTube Data API, and Telegram bot notifications.
-  - Phase 1 exit criteria fully satisfied. Ready for Phase 2.
+  - 4 GitHub Actions workflows implemented: `daily_pipeline.yml`, `engage.yml`, `analytics.yml`, `commands.yml`.
+  - Single-secret `ENV_FILE` unpacking step added to all 4 workflows.
+  - Core modules authored: `llm.py`, `quota.py`, `notify.py`, `db.py`, `research.py`, `strategy.py`, `script.py`, `qa.py`, `tts.py`, `captions.py`, `assets.py`, `render.py`, `publish.py`, `comments.py`, `analytics.py`, `main.py`.
+  - Zero-dependency OAuth tool: `scripts/oauth_setup.py`.
+  - Integration smoke test: `scripts/smoke_test.py`.
+  - Cloud backup verified: Synced to Google Drive (`gdrive:envs/shorts-agent`) and Cloudflare R2 mirror (`OK: used=30MB, limit=8192MB`).
+  - Integration smoke test passed with 100% green checks across Gemini, zero-key visual engine (Pollinations AI + procedural fallback), edge-tts, ffmpeg, YouTube Data API, and Telegram bot notifications.
+- [x] **Phase 2 Content Engine Completed:**
+  - Configured `agent/config/channel_bible.md` with niche "QuickTech Hacks" (Tech & Workplace Productivity), 10 reference competitor channels, and 3 recurring series formats.
+  - Implemented `scripts/generate_phase2.py` with multi-batch generation and resilient failover.
+  - Generated and stored 30 curated Short ideas in SQLite (`ideas` table) split evenly across 3 series:
+    - Series 1: PC & Windows Superpowers (10 ideas)
+    - Series 2: Free AI Multipliers (10 ideas)
+    - Series 3: Focus & Productivity Systems (10 ideas)
+  - Generated 10 complete 25–40s viral Short scripts (4 from Series 1, 3 from Series 2, 3 from Series 3).
+  - 100% passed QA Gate #1 validation (`qa.check_script`): hook $\le$ 12 words, duration 20–45s, title $\le$ 60 chars, credible source attribution, zero banned topics.
+  - Inserted all 10 validated scripts into SQLite `videos` table (`script_qa_ok = 1`).
+  - Exported report to `agent/state/phase2_scripts_report.json`.
 
 ---
 
-## 2. Next
-- [ ] User completes OAuth sign-in via `python scripts/oauth_setup.py` to get `YT_REFRESH_TOKEN`.
-- [ ] User configures GitHub Secrets (`GEMINI_API_KEY`, `PEXELS_API_KEY`, `YT_CLIENT_ID`, `YT_CLIENT_SECRET`, `YT_REFRESH_TOKEN`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`).
-- [ ] Run `python scripts/smoke_test.py` to confirm live API access.
-- [ ] Begin Phase 2: Generate 30 ideas and 10 scripts; review script quality; tune prompts.
+## 2. Next (Phase 3: Video Assembly & Rendering)
+- [ ] Run end-to-end rendering test on the first approved script (`Windows File Preview Hack: Instant Quick Look Shortcut`).
+- [ ] Verify edge-tts neural voice generation and subtitle word alignment.
+- [ ] Verify zero-key visual synthesis (Pollinations.ai 9:16 + ffmpeg zoompan motion clip generator).
+- [ ] Validate rendered video against QA Gate #2 (`qa.check_render`): 1080x1920, 20–45s, −14 LUFS loudness, synchronized hardcoded captions.
+- [ ] Verify Telegram preview delivery of the rendered MP4.
 
 ---
 
-## 3. Open Questions
-- What is your final choice of niche (e.g. Workplace & Excel Tips, Tech & AI in 60s, Psychology Facts)?
-- What is your target language for voiceover (`en` for English, `hi` for Hindi)?
-
----
-
-## 4. What the User Must Do
-1. Run `python scripts/oauth_setup.py` in a terminal to authenticate your YouTube channel and copy `YT_REFRESH_TOKEN`.
-2. Add your secrets to your GitHub repository under `Settings -> Secrets and variables -> Actions`.
-3. Submit the free YouTube API compliance audit form in Google Cloud Console.
+## 3. What the User Must Do
+1. All core credentials are saved in GitHub Secrets (`ENV_FILE`) and local `C:\Secrets\shorts-agent.env`. No manual configuration needed.
+2. Review the 10 approved Short scripts in Phase 2 report.
