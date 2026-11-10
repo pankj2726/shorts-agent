@@ -1,0 +1,271 @@
+[
+  {
+    "provider": "google-gemini",
+    "official_website": "https://ai.google.dev",
+    "api_docs_url": "https://ai.google.dev/gemini-api/docs",
+    "models": [
+      {
+        "model_id": "gemini-flash-lite-latest",
+        "modality": ["text"],
+        "context_tokens": null,
+        "notes": "Active and confirmed working as of 2026-11-10"
+      }
+    ],
+    "access_type": "free_tier",
+    "quota": {
+      "requests_per_minute": null,
+      "requests_per_day": null,
+      "tokens_per_minute": null
+    },
+    "pricing_verified": true,
+    "pricing_url": "https://ai.google.dev/gemini-api/docs/pricing",
+    "commercial_use_verified": false,
+    "privacy_policy_reviewed": false,
+    "privacy_note": "Free-tier content may be used by Google to improve models — verify before uploading user data",
+    "health": "ok",
+    "fallback_model": null,
+    "last_verified": "2026-11-10",
+    "known_limitations": [
+      "Free-tier data may be used for model training",
+      "Rate limits model-specific — check account dashboard"
+    ],
+    "integration_status": "integrated"
+  },
+  {
+    "provider": "openrouter",
+    "official_website": "https://openrouter.ai",
+    "api_docs_url": "https://openrouter.ai/docs",
+    "models": [
+      {
+        "model_id": "openai/gpt-oss-120b",
+        "modality": ["text"],
+        "context_tokens": null,
+        "notes": "Active Groq-hosted model"
+      },
+      {
+        "model_id": "qwen/qwen3.8-27b",
+        "modality": ["text"],
+        "context_tokens": null,
+        "notes": "Active as of last test"
+      }
+    ],
+    "access_type": "free_tier",
+    "quota": {
+      "requests_per_minute": 20,
+      "requests_per_day": 50,
+      "tokens_per_minute": null,
+      "note": "50/day free; rises to 1000/day after $10 purchase (paid qualification)"
+    },
+    "pricing_verified": true,
+    "pricing_url": "https://openrouter.ai/pricing",
+    "commercial_use_verified": false,
+    "privacy_policy_reviewed": false,
+    "health": "ok",
+    "fallback_model": null,
+    "last_verified": "2026-11-10",
+    "known_limitations": [
+      "50 requests/day hard cap on free tier",
+      "Model availability changes frequently"
+    ],
+    "integration_status": "integrated"
+  },
+  {
+    "provider": "groq",
+    "official_website": "https://groq.com",
+    "api_docs_url": "https://console.groq.com/docs",
+    "models": [
+      {
+        "model_id": "whisper-large-v3",
+        "modality": ["audio-to-text"],
+        "context_tokens": null,
+        "notes": "Speech recognition; word-level timestamps"
+      }
+    ],
+    "access_type": "free_tier",
+    "quota": {
+      "requests_per_minute": null,
+      "requests_per_day": null,
+      "tokens_per_minute": null,
+      "note": "Account-specific limits — check dashboard; do not assume developer plan = free plan"
+    },
+    "pricing_verified": true,
+    "pricing_url": "https://console.groq.com/docs/rate-limits",
+    "commercial_use_verified": false,
+    "privacy_policy_reviewed": false,
+    "health": "ok",
+    "fallback_model": null,
+    "last_verified": "2026-11-10",
+    "known_limitations": [
+      "llama-3.1-70b-versatile deprecated — do not use",
+      "Rate limits are account-specific, not plan-generic"
+    ],
+    "integration_status": "integrated"
+  },
+  {
+    "provider": "cerebras",
+    "official_website": "https://cerebras.ai",
+    "api_docs_url": "https://inference-docs.cerebras.ai",
+    "models": [],
+    "access_type": "free_tier",
+    "quota": {
+      "requests_per_minute": null,
+      "requests_per_day": null,
+      "tokens_per_minute": null,
+      "context_tokens_free": 8192,
+      "note": "Free tier documented; higher context requires explicit request"
+    },
+    "pricing_verified": true,
+    "pricing_url": "https://inference-docs.cerebras.ai/support/pricing",
+    "commercial_use_verified": false,
+    "privacy_policy_reviewed": false,
+    "health": "unknown",
+    "fallback_model": null,
+    "last_verified": "2026-11-10",
+    "known_limitations": [
+      "8192 token context on free tier",
+      "Integration not yet tested"
+    ],
+    "integration_status": "not_started"
+  },
+  {
+    "provider": "pollinations-ai",
+    "official_website": "https://pollinations.ai",
+    "api_docs_url": "https://pollinations.ai/docs",
+    "models": [
+      {
+        "model_id": "flux",
+        "modality": ["text-to-image"],
+        "context_tokens": null,
+        "notes": "Free HTTP API; rate limited — observed 402 on burst requests"
+      }
+    ],
+    "access_type": "free_tier",
+    "quota": {
+      "requests_per_minute": null,
+      "requests_per_day": null,
+      "note": "Rate limit observed empirically; exact quota undocumented — test with delays"
+    },
+    "pricing_verified": false,
+    "commercial_use_verified": false,
+    "privacy_policy_reviewed": false,
+    "health": "degraded",
+    "fallback_model": "procedural-gradient-local",
+    "last_verified": "2026-11-10",
+    "known_limitations": [
+      "402 errors on burst requests (3 of 4 keywords failed in Phase 3 test)",
+      "No guaranteed SLA",
+      "Rate limit undocumented"
+    ],
+    "integration_status": "integrated"
+  },
+  {
+    "provider": "edge-tts",
+    "official_website": "https://github.com/rany2/edge-tts",
+    "api_docs_url": "https://github.com/rany2/edge-tts",
+    "models": [
+      {
+        "model_id": "en-IN-NeerjaNeural",
+        "modality": ["text-to-speech"],
+        "context_tokens": null,
+        "notes": "Indian English neural TTS; active and working as of 2026-11-10"
+      }
+    ],
+    "access_type": "free_tier",
+    "quota": {
+      "note": "Uses Microsoft Edge TTS infrastructure; rate limits may apply at scale"
+    },
+    "pricing_verified": false,
+    "commercial_use_verified": false,
+    "privacy_policy_reviewed": false,
+    "health": "ok",
+    "fallback_model": "pyttsx3-local",
+    "last_verified": "2026-11-10",
+    "known_limitations": [
+      "API changed: use boundary=WordBoundary + sub_maker.feed() + get_srt()",
+      "pyttsx3 fallback produces very quiet audio (-17.5 LUFS) — neural preferred"
+    ],
+    "integration_status": "integrated"
+  },
+  {
+    "provider": "ace-step",
+    "official_website": "https://github.com/ace-step/ACE-Step-1.5",
+    "api_docs_url": "https://github.com/ace-step/ACE-Step-1.5",
+    "models": [
+      {
+        "model_id": "ace-step-1.5",
+        "modality": ["text-to-music", "audio-editing"],
+        "context_tokens": null,
+        "notes": "Local inference; <4GB VRAM (project claim — verify empirically)"
+      }
+    ],
+    "access_type": "open_source",
+    "quota": {"note": "Local inference — unlimited if hardware permits"},
+    "pricing_verified": true,
+    "commercial_use_verified": false,
+    "commercial_use_note": "Code: MIT license. Model weights: verify separately before commercial use",
+    "privacy_policy_reviewed": true,
+    "health": "unknown",
+    "fallback_model": "cc0-music-library",
+    "last_verified": "2026-11-10",
+    "known_limitations": [
+      "Model weight license must be verified independently of MIT code license",
+      "VRAM claim (<4GB) is project-stated, not independently benchmarked",
+      "Not yet tested locally"
+    ],
+    "integration_status": "not_started"
+  },
+  {
+    "provider": "whisperx",
+    "official_website": "https://github.com/m-bain/whisperX",
+    "api_docs_url": "https://github.com/m-bain/whisperX",
+    "models": [
+      {
+        "model_id": "whisperx-large-v3",
+        "modality": ["audio-to-text"],
+        "context_tokens": null,
+        "notes": "Word-level timestamps, speaker diarization; local inference"
+      }
+    ],
+    "access_type": "open_source",
+    "quota": {"note": "Local inference — unlimited"},
+    "pricing_verified": true,
+    "commercial_use_verified": false,
+    "privacy_policy_reviewed": true,
+    "health": "unknown",
+    "fallback_model": "edge-tts-wordboundary",
+    "last_verified": "2026-11-10",
+    "known_limitations": [
+      "Requires PyTorch and potentially large model downloads",
+      "Not yet tested in this environment"
+    ],
+    "integration_status": "not_started"
+  },
+  {
+    "provider": "wan-video",
+    "official_website": "https://github.com/AlibabaCloud-Official/Wan3.0",
+    "api_docs_url": "https://github.com/AlibabaCloud-Official/Wan3.0",
+    "models": [
+      {
+        "model_id": "wan-2.1-1.3b",
+        "modality": ["text-to-video", "image-to-video"],
+        "context_tokens": null,
+        "notes": "1.3B model; ~8.19GB VRAM (project claim); local inference"
+      }
+    ],
+    "access_type": "open_source",
+    "quota": {"note": "Local inference; VRAM-bound"},
+    "pricing_verified": false,
+    "commercial_use_verified": false,
+    "commercial_use_note": "License must be verified before commercial deployment",
+    "privacy_policy_reviewed": false,
+    "health": "unknown",
+    "fallback_model": "pollinations-ai",
+    "last_verified": "2026-11-10",
+    "known_limitations": [
+      "VRAM requirement (~8.19GB) may exceed available hardware",
+      "License not independently verified",
+      "Not yet tested in this environment"
+    ],
+    "integration_status": "not_started"
+  }
+]
