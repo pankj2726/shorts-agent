@@ -373,7 +373,7 @@ def run_smoke() -> None:
         _notify("PIPELINE_ONLINE", msg, level="success")
 
 
-if __name__ == "__main__" or True:
+if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python -m agent.main [pipeline|engage|analytics|commands|smoke]")
         sys.exit(1)
