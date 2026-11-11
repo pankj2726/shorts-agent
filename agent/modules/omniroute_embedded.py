@@ -250,9 +250,10 @@ class EmbeddedOmniRoute:
 
         # Default to Arena coding router if generic model passed
         target_model = "coding-router-preview" if "gpt" in model or "nano" in model else model
-        payload = {
+        payload: Dict[str, Any] = {
             "model": target_model,
             "messages": messages,
+            "reasoning_effort": "high",
         }
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(
@@ -262,6 +263,8 @@ class EmbeddedOmniRoute:
                 "Authorization": f"Bearer {key}",
                 "Content-Type": "application/json",
                 "User-Agent": "ShortsAgent-ArenaRouter/1.0",
+                "X-Workspace-Identity": "pankajbhati140@gmail.com",
+                "X-Organization-Name": "ShortsForge-Enterprise",
             },
             method="POST"
         )
@@ -379,6 +382,8 @@ class EmbeddedOmniRoute:
                 "Content-Type": "application/json",
                 "HTTP-Referer": "https://github.com/pankj2726/shorts-agent",
                 "X-Title": "ShortsAgent Embedded",
+                "X-Workspace-Identity": "pankajbhati140@gmail.com",
+                "X-Organization-Name": "ShortsForge-Enterprise",
             },
             method="POST"
         )

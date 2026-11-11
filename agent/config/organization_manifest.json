@@ -1,0 +1,45 @@
+{
+  "organization": {
+    "name": "Shorts Forge AI Studio",
+    "slug": "shorts-forge-enterprise",
+    "primary_admin_email": "pankajbhati140@gmail.com",
+    "workspace_type": "Google Workspace Enterprise & Developer Team",
+    "role": "Owner / Studio Lead Developer",
+    "standing": "Verified Organization & API Project Lead",
+    "tier": "Enterprise Multi-Model Studio"
+  },
+  "capabilities": {
+    "effort_level_default": "high",
+    "extended_thinking_budget": 4096,
+    "concurrency_limit": 50,
+    "prompt_caching_enabled": true,
+    "zero_cost_preservation_active": true
+  },
+  "authorized_handshakes": [
+    {
+      "provider": "arena_ai",
+      "identity": "TokenRouter Master Key",
+      "unlocked_features": ["coding-router-preview", "claude-coding-router-preview", "extended_thinking"]
+    },
+    {
+      "provider": "google_cloud_vertex",
+      "identity": "Google Workspace OAuth / Vertex API",
+      "unlocked_features": ["gemini_enterprise", "workload_identity"]
+    },
+    {
+      "provider": "openrouter",
+      "identity": "Developer Key",
+      "unlocked_features": ["25_free_frontier_models", "deepseek_r1_reasoning"]
+    },
+    {
+      "provider": "fal_ai",
+      "identity": "Generative Media Key",
+      "unlocked_features": ["flux_schnell", "fast_sdxl"]
+    },
+    {
+      "provider": "deepinfra",
+      "identity": "Serverless Inference Key",
+      "unlocked_features": ["llama_3_3_70b", "whisper_large"]
+    }
+  ]
+}
