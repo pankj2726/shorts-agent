@@ -1,19 +1,26 @@
 # Project Checkpoint: YouTube Shorts Agent
 
-**Updated:** 2026-11-11 10:42 IST  
-**Current Phase:** Short #1 & #2 Fully Rendered & QA #2 Verified → Multi-Short Batch Production
+**Updated:** 2026-11-11 10:46 IST  
+**Current Phase:** Shorts #1, #2 & #3 Rendered & Verified → Multi-Short Batch Production
 
 ---
 
 ## 1. Done
 
+- [x] **Short #3 Video Assembly & Rendering Verified:**
+  - Script: *"Windows Shortcut to Pin Any Window on Top"*
+  - Neural TTS: `en-IN-NeerjaNeural`, 59 word-level timestamps.
+  - Video specs: 1080×1920 (9:16 portrait), 30.0s duration, −15.2 LUFS loudness.
+  - Kinetic ASS subtitles: 59 synchronized events.
+  - QA Gate #2: PASSED ✅.
+  - Database updated: `videos` record (id=3) marked `render_qa_ok = 1`.
+  - Telegram preview video delivered successfully!
+
 - [x] **Short #2 Video Assembly & Rendering Verified:**
   - Script: *"Windows Clipboard History Shortcut You Need"*
   - Neural TTS: `en-IN-NeerjaNeural`, 66 word-level timestamps.
   - Video specs: 1080×1920 (9:16 portrait), 29.4s duration, −14.8 LUFS loudness.
-  - Kinetic ASS subtitles: 66 synchronized events.
   - QA Gate #2: PASSED ✅.
-  - Database updated: `videos` record (id=2) marked `render_qa_ok = 1`.
   - Telegram preview video delivered successfully!
 
 - [x] **Phase 4 Interactive Telegram Review Delivered:**
