@@ -1,11 +1,25 @@
 # Project Checkpoint: YouTube Shorts Agent (Shorts Forge)
 
-**Updated:** 2026-11-11 14:30 IST  
-**Current Phase:** Workspace Identity Gateway (WIG) Implemented & R2 Vault Cloud Synced
+**Updated:** 2026-11-11 15:35 IST  
+**Current Phase:** Model Freedom Initiative (MFI) Implemented & Telegram Model Selector Live
 
 ---
 
 ## 1. Done
+
+- [x] **Model Freedom Initiative (Phase 4 Implementation Complete):**
+  - **Universal Capability Registry (`agent/modules/capability_registry.py`):**
+    - Decoupled model selection from consumer subscription gates.
+    - Defined canonical model mappings across Arena.AI, OpenRouter, Groq, DeepInfra, and Google Vertex AI.
+    - Live capability tracking: reasoning effort levels (`low`, `medium`, `high`, `max`), thinking budgets, tool calling, and context limits.
+  - **Dynamic Parameter Normalization (`omniroute_embedded.py`):**
+    - Automatically routes prompts based on the currently selected canonical model and effort depth.
+    - Auto-translates effort to provider-native payloads (`reasoning_effort: high` on Arena, thinking budgets on Anthropic/Gemini) while safely omitting parameters on non-reasoning models.
+  - **Telegram Model Freedom Interface (`telegram_control.py`):**
+    - Added `/models` command: Displays live catalog of models, active brain, and latency.
+    - Added `/model <name>`: Instantly switches active model from Android phone or desktop (e.g. `/model claude`, `/model deepseek`).
+    - Added `/effort <low|medium|high|max>`: Toggles thinking depth dynamically.
+    - Unit tests verified: `tests/test_telegram_control.py` (7/7 passing in 0.68s).
 
 - [x] **Workspace Identity Gateway (WIG) Implementation Complete:**
   - **Auto-Switching 429 & Busy Failover Engine (`omniroute_embedded.py`):**
