@@ -9,6 +9,7 @@ generate_phase3.py — Phase 3 Video Assembly & Rendering:
   6. Updates SQLite videos record (render_path, render_qa_ok).
   7. Delivers notification + video preview to Telegram.
 """
+import argparse
 import json
 import logging
 import os
@@ -27,13 +28,26 @@ logger = logging.getLogger("phase3")
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Render short video from approved script in SQLite")
+    parser.add_argument("--video-id", type=int, default=None, help="Specific video ID to render")
+    parser.add_argument("--next", action="store_true", help="Render next unrendered video in queue")
+    args = parser.parse_args()
+
     print("=" * 70)
     print(" YouTube Shorts Agent — Phase 3 Video Assembly & Rendering Engine")
     print("=" * 70)
 
-    # 1. Fetch Video #1 from SQLite
+    # 1. Fetch Video from SQLite
     conn = db.get_conn()
-    row = conn.execute("SELECT * FROM videos WHERE script_qa_ok = 1 ORDER BY id ASC LIMIT 1").fetchone()
+    if args.video_id:
+        row = conn.execute("SELECT * FROM videos WHERE id = ?", (args.video_id,)).fetchone()
+    elif args.next:
+        row = conn.execute("SELECT * FROM videos WHERE script_qa_ok = 1 AND (render_qa_ok = 0 OR render_qa_ok IS NULL) ORDER BY id ASC LIMIT 1").fetchone()
+    else:
+        # Default to first unrendered or video #1
+        row = conn.execute("SELECT * FROM videos WHERE script_qa_ok = 1 AND (render_qa_ok = 0 OR render_qa_ok IS NULL) ORDER BY id ASC LIMIT 1").fetchone()
+        if not row:
+            row = conn.execute("SELECT * FROM videos WHERE script_qa_ok = 1 ORDER BY id ASC LIMIT 1").fetchone()
     conn.close()
 
     if not row:
@@ -74,12 +88,14 @@ def main() -> None:
 
     # 3. Fetch / Synthesize Visuals
     print("\n[3/5] Generating Visual Scene Motion Clips (Zero-Key AI / Procedural)...")
-    keywords = [
-        "file preview windows computer",
-        "keyboard shortcut control space",
-        "modern computer desktop documents",
-        "speed productivity office setup",
-    ]
+    tags_list = []
+    if video.get("tags"):
+        try:
+            tags_list = json.loads(video["tags"])
+        except Exception:
+            tags_list = [t.strip() for t in video["tags"].split(",") if t.strip()]
+
+    keywords = [title] + tags_list[:3] + ["modern computer screen workflow", "office productivity tech"]
     clips = assets.fetch_stock_clips(
         keywords=keywords,
         output_dir=work_dir,
