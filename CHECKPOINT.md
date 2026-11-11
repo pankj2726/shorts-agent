@@ -7,32 +7,23 @@
 
 ## 1. Done
 
-- [x] **Model Freedom Initiative V3 (Decoupled Model Selection & Organization Auth):**
+- [x] **Model Freedom Initiative V3 & Unified Powerhouse Gateway:**
   - **Universal Capability Registry (`agent/modules/capability_registry.py`):**
     - Removed all application-level subscription tiers and upgrade locks.
     - Decoupled model selection from consumer plan boundaries.
     - Dynamic status resolution (`AVAILABLE`, `RESTRICTED`, `UNSUPPORTED`).
     - Dynamic parameter translator mapping effort levels (`low`, `medium`, `high`, `max`) to native API parameters.
-    - Integrated OpenAI (`gpt-4o`, `o3-mini`, `o1`) and Claude 3.7 Sonnet (`claude-3-7-sonnet`).
-  - **Direct OpenAI Adapter (`agent/modules/openai_adapter.py`):**
-    - Native support for OpenAI/ChatGPT API keys (`OPENAI_API_KEY`), Organization IDs, and Project IDs.
-    - Native `reasoning_effort` translation for `o1` and `o3-mini` (low/medium/high).
-  - **Direct Claude Console / Anthropic Adapter (`agent/modules/anthropic_adapter.py`):**
-    - Native support for Claude API keys, Organization IDs, and Workload Identity Federation (WIF).
-    - Native thinking budget calculations (`low`: 2048, `medium`: 8192, `high`: 16384, `max`: 32768 tokens).
-  - **Secure Ingestion Utility (`scripts/ingest_api_keys.py`):**
-    - Masked input CLI for safe ingestion of Claude, ChatGPT, and Vertex AI keys (Rule 4 compliant).
-    - Automatic Cloudflare R2 asymmetric vault synchronization.
-  - **Model Access Policy Engine (`agent/modules/access_policy.py`):**
-    - Neutral operational checks: user authentication, provider connectivity, model availability, quota sufficiency.
-    - Zero consumer subscription upselling or upgrade prompts.
-  - **Dynamic Multi-Provider Discovery (`agent/modules/model_discovery.py`):**
-    - Automatic dynamic discovery across Arena, OpenRouter, Groq, Anthropic, and OpenAI.
-    - In-memory 1-hour TTL caching for sub-millisecond lookups.
-  - **Interactive CLI & Telegram Selector (`scripts/model_catalog_cli.py` & `telegram_control.py`):**
-    - CLI supports `--select <model_id>`, `--effort <level>`, `--refresh`.
-    - Telegram supports `/models [filter]`, `/model <id>`, `/effort <level>`, `/refresh_models`.
-  - **All V3 Unit Tests Passing:** 6/6 in `tests/test_model_freedom_v3.py`.
+    - Registered 16 powerhouse models: Claude 3.5 Sonnet, Claude 3.7 Sonnet, Claude 3.5 Haiku, Arena Coding Router, OpenAI o1, o3-mini, GPT-4o, DeepSeek R1, DeepSeek V3 (671B), Mistral Large 2 (123B), Meta Llama 3.1 405B, Llama 3.3 70B, Google Gemini 2.0 Flash, Gemini 1.5 Pro (2M context), Qwen 2.5 Coder, and Flux Stills.
+  - **Universal Local Gateway Server (`agent/modules/gateway_server.py`):**
+    - Multi-threaded reverse proxy running at `http://0.0.0.0:8080`.
+    - Exposes standard OpenAI `/v1/chat/completions` and Anthropic `/v1/messages`.
+    - Exposes `/v1/models` and `/v1/conversations`.
+    - SQLite persistent cross-model conversation store (`agent/state/unified_conversations.db`) restoring the ability to view, sync, and control conversations started on Arena.AI, Claude, or ChatGPT interchangeably across Android, Web, and desktop.
+  - **Direct Adapters & Multi-Provider Cascading:**
+    - `anthropic_adapter.py` supporting `CLAUDE_CONSOLE_API_KEY` and workspace headers.
+    - `openai_adapter.py` supporting `OPENAI_API_KEY`, org IDs, and o1/o3-mini reasoning effort.
+    - `omniroute_embedded.py` with automatic 429/busy failover across Arena H100 clusters, OpenRouter, Groq, DeepInfra, and Pollinations.
+  - **All Tests Passing 100%:** 9/9 in `test_model_freedom_v3.py` and `test_gateway_server.py`.
 
 - [x] **Workspace Identity Gateway (WIG) Implementation Complete:**
   - **Auto-Switching 429 & Busy Failover Engine (`omniroute_embedded.py`):**
