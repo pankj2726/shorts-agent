@@ -1,17 +1,25 @@
 # Project Checkpoint: YouTube Shorts Agent
 
-**Updated:** 2026-11-11 10:58 IST  
-**Current Phase:** Shorts #1 to #6 Rendered & QA #2 Verified → Multi-Short Batch Production
+**Updated:** 2026-11-11 11:02 IST  
+**Current Phase:** Shorts #1 to #7 Rendered & QA #2 Verified → Multi-Short Batch Production
 
 ---
 
 ## 1. Done
 
+- [x] **Short #7 Video Assembly & Rendering Verified:**
+  - Script: *"Make cheap mics sound like studio quality for free"*
+  - Neural TTS: `en-IN-NeerjaNeural`, 83 word-level timestamps.
+  - Video specs: 1080×1920 (9:16 portrait), 42.0s duration, −15.0 LUFS loudness.
+  - Kinetic ASS subtitles: 83 synchronized events.
+  - QA Gate #2: PASSED ✅.
+  - Database updated: `videos` record (id=7) marked `render_qa_ok = 1`.
+  - Telegram preview video delivered successfully!
+
 - [x] **Short #6 Video Assembly & Rendering Verified:**
   - Script: *"Gamma AI: Generate Presentation Decks in 30 Seconds"*
   - Neural TTS: `en-IN-NeerjaNeural`, 72 word-level timestamps.
   - Video specs: 1080×1920 (9:16 portrait), 31.9s duration, −15.2 LUFS loudness.
-  - Kinetic ASS subtitles: 72 synchronized events.
   - QA Gate #2: PASSED ✅.
   - Database updated: `videos` record (id=6) marked `render_qa_ok = 1`.
   - Telegram preview video delivered successfully!
