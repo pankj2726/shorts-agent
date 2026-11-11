@@ -126,7 +126,55 @@ class EmbeddedOmniRoute:
                     logger.warning(f"OpenRouter route failed: {e}. Falling back...")
                     last_error = e
 
+            elif prov == "deepinfra" and os.environ.get("DEEPINFRA_API_KEY"):
+                try:
+                    return self._call_deepinfra_text(prompt, system_prompt, model, timeout)
+                except Exception as e:
+                    logger.warning(f"DeepInfra route failed: {e}. Falling back...")
+                    last_error = e
+
         raise RuntimeError(f"All embedded routes failed. Last error: {last_error}")
+
+    def _call_deepinfra_text(
+        self, prompt: str, system_prompt: Optional[str], model: str, timeout: int
+    ) -> Dict[str, Any]:
+        key = os.environ.get("DEEPINFRA_API_KEY")
+        if not key:
+            raise ValueError("DEEPINFRA_API_KEY missing")
+
+        url = "https://api.deepinfra.com/v1/openai/chat/completions"
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
+        # Default to high performance Llama 3.1 if generic model passed
+        target_model = "meta-llama/Meta-Llama-3.1-8B-Instruct" if "gpt" in model or "nano" in model else model
+        payload = {
+            "model": target_model,
+            "messages": messages,
+        }
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            data=data,
+            headers={
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json",
+                "User-Agent": "ShortsAgent-EmbeddedRouter/1.0",
+            },
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            res_json = json.loads(resp.read().decode("utf-8"))
+            choice = res_json["choices"][0]["message"]["content"]
+            return {
+                "provider": "deepinfra",
+                "model": target_model,
+                "cost": 0.0,
+                "text": choice.strip(),
+                "status": "success"
+            }
 
     def _call_pollinations_text(
         self, prompt: str, system_prompt: Optional[str], model: str, timeout: int

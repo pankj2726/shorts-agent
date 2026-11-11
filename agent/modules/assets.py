@@ -59,36 +59,27 @@ def fetch_stock_clips(
 def _fetch_pollinations_motion_clip(keyword: str, output_dir: Path, video_id: int) -> Optional[dict]:
     """Generate an AI scene image via Pollinations.ai (no key needed) and convert to a 3s 1080x1920 motion MP4."""
     try:
-        import subprocess
-        import urllib.parse
+        from agent.modules.generative_media import generate_scene_image, create_cinematic_motion_clip
         clean_kw = keyword.strip()
         safe_name = "".join(c if c.isalnum() else "_" for c in clean_kw[:15]).strip("_") or "scene"
-        encoded = urllib.parse.quote(f"cinematic vertical photography, {clean_kw}, high quality, 9:16 portrait")
-        img_url = f"https://image.pollinations.ai/prompt/{encoded}?width=1080&height=1920&nologo=true"
+        prompt = f"cinematic 8k vertical documentary, {clean_kw}, award-winning nature photography, photorealistic, 9:16 portrait"
+        
         img_path = output_dir / f"scene_{video_id}_{safe_name}.jpg"
         clip_path = output_dir / f"motion_{video_id}_{safe_name}.mp4"
 
-        _download(img_url, img_path)
-        if not img_path.exists() or img_path.stat().st_size < 1000:
-            return None
-
-        cmd = [
-            "ffmpeg", "-y", "-loop", "1", "-i", str(img_path),
-            "-vf", "zoompan=z='min(zoom+0.0015,1.15)':d=90:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920",
-            "-t", "3", "-c:v", "libx264", "-pix_fmt", "yuv420p",
-            str(clip_path)
-        ]
-        subprocess.run(cmd, capture_output=True, timeout=30)
-        if clip_path.exists():
-            return {
-                "asset_type": "generated_image_motion",
-                "source_url": img_url,
-                "license": "CC0 / Free Public Domain (Pollinations.ai)",
-                "local_path": str(clip_path),
-                "keyword": keyword,
-            }
+        generate_scene_image(prompt, img_path, width=1080, height=1920, model="flux", timeout=30)
+        if img_path.exists() and img_path.stat().st_size > 1000:
+            create_cinematic_motion_clip(img_path, clip_path, duration=3.5, fps=30)
+            if clip_path.exists():
+                return {
+                    "asset_type": "generated_image_motion",
+                    "source_url": f"pollinations:flux/{safe_name}",
+                    "license": "CC0 / Free Public Domain (Pollinations.ai Flux)",
+                    "local_path": str(clip_path),
+                    "keyword": keyword,
+                }
     except Exception as e:
-        logger.warning("assets: Pollinations motion clip failed for '%s': %s", keyword, e)
+        logger.warning("assets: Pollinations Flux motion clip failed for '%s': %s", keyword, e)
     return None
 
 

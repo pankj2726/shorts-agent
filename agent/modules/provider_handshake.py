@@ -56,6 +56,14 @@ def _load_env_safe() -> None:
                 pass
             break
 
+    # Alias fallbacks
+    if not os.environ.get("FAL_KEY") and os.environ.get("FAL_AI_API_KEY"):
+        os.environ["FAL_KEY"] = os.environ["FAL_AI_API_KEY"]
+    if not os.environ.get("POLLINATIONS_API_KEY") and os.environ.get("POLLINATIONS_AI_API_KEY"):
+        os.environ["POLLINATIONS_API_KEY"] = os.environ["POLLINATIONS_AI_API_KEY"]
+    if not os.environ.get("VERTEX_API_KEY") and os.environ.get("VERTEX_AI_API_KEY"):
+        os.environ["VERTEX_API_KEY"] = os.environ["VERTEX_AI_API_KEY"]
+
 _load_env_safe()
 
 # ─── 10 Target Provider Handshake Specifications ──────────────────────────────

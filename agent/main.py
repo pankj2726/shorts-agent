@@ -94,6 +94,20 @@ def run_pipeline() -> None:
         if not script:
             raise RuntimeError("Script generation failed both attempts")
 
+        # Anti-Slop Audit & Humanizer Gate
+        from agent.modules.anti_slop_killer import AntiSlopKiller
+        slop_killer = AntiSlopKiller()
+        slop_audit = slop_killer.audit_script(script["script"])
+        if not slop_audit["passed"]:
+            logger.info("pipeline: Slop cliches detected %s -> Humanizing script...", slop_audit["detected_cliches"])
+            script["script"] = slop_killer.clean_and_humanize(script["script"])
+
+        # 100-Point Viral Potential Evaluation
+        from agent.modules.viral_score import ViralScoreEngine
+        viral_engine = ViralScoreEngine()
+        v_score = viral_engine.evaluate(script["script"], script.get("title", ""))
+        logger.info("pipeline: Viral Potential Score = %s/100 (%s, Action: %s)", v_score["total_score"], v_score["decision"], v_score["action"])
+
         video_id = script["video_id"]
         work_dir = Path(tempfile.mkdtemp(prefix=f"short_{video_id}_"))
 
