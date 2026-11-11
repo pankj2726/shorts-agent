@@ -217,6 +217,108 @@ CANONICAL_MODELS: Dict[str, Dict[str, Any]] = {
             "vision": False,
             "generative_media": True,
         }
+    },
+    "gpt-4o": {
+        "canonical_id": "gpt-4o",
+        "display_name": "OpenAI GPT-4o",
+        "family": "openai",
+        "description": "Flagship high-intelligence multimodal model for text, vision, and coding.",
+        "provider_mappings": {
+            "openai": "gpt-4o",
+            "openrouter": "openai/gpt-4o",
+            "arena": "gpt-4o"
+        },
+        "default_provider": "openai",
+        "context_window": 128000,
+        "max_output_tokens": 16384,
+        "cost_tier": "organization_funded",
+        "capabilities": {
+            "reasoning_effort": {
+                "supported": False,
+                "levels": []
+            },
+            "extended_thinking": False,
+            "thinking_budget": False,
+            "tool_calling": True,
+            "structured_json": True,
+            "vision": True,
+        }
+    },
+    "o3-mini": {
+        "canonical_id": "o3-mini",
+        "display_name": "OpenAI o3-mini (Reasoning)",
+        "family": "openai",
+        "description": "Next-gen fast reasoning model with native low/medium/high effort control.",
+        "provider_mappings": {
+            "openai": "o3-mini",
+            "openrouter": "openai/o3-mini"
+        },
+        "default_provider": "openai",
+        "context_window": 200000,
+        "max_output_tokens": 100000,
+        "cost_tier": "organization_funded",
+        "capabilities": {
+            "reasoning_effort": {
+                "supported": True,
+                "levels": ["low", "medium", "high"]
+            },
+            "extended_thinking": True,
+            "thinking_budget": False,
+            "tool_calling": True,
+            "structured_json": True,
+            "vision": False,
+        }
+    },
+    "o1": {
+        "canonical_id": "o1",
+        "display_name": "OpenAI o1 (Full Reasoning)",
+        "family": "openai",
+        "description": "Frontier high-effort reasoning model for complex engineering and math.",
+        "provider_mappings": {
+            "openai": "o1",
+            "openrouter": "openai/o1"
+        },
+        "default_provider": "openai",
+        "context_window": 200000,
+        "max_output_tokens": 100000,
+        "cost_tier": "organization_funded",
+        "capabilities": {
+            "reasoning_effort": {
+                "supported": True,
+                "levels": ["low", "medium", "high"]
+            },
+            "extended_thinking": True,
+            "thinking_budget": False,
+            "tool_calling": True,
+            "structured_json": True,
+            "vision": True,
+        }
+    },
+    "claude-3-7-sonnet": {
+        "canonical_id": "claude-3-7-sonnet",
+        "display_name": "Anthropic Claude 3.7 Sonnet (Hybrid)",
+        "family": "anthropic",
+        "description": "Frontier hybrid reasoning Claude model with variable thinking budget.",
+        "provider_mappings": {
+            "anthropic": "claude-3-7-sonnet-20250219",
+            "arena": "claude-coding-router-preview",
+            "openrouter": "anthropic/claude-3.7-sonnet"
+        },
+        "default_provider": "arena",
+        "context_window": 200000,
+        "max_output_tokens": 64000,
+        "cost_tier": "router_funded",
+        "capabilities": {
+            "reasoning_effort": {
+                "supported": True,
+                "levels": ["low", "medium", "high", "max"]
+            },
+            "extended_thinking": True,
+            "thinking_budget": True,
+            "tool_calling": True,
+            "structured_json": True,
+            "vision": True,
+        }
     }
 }
 
@@ -280,7 +382,9 @@ class UniversalCapabilityRegistry:
                 available_providers.append(prov)
             elif prov == "fal_ai" and (os.environ.get("FAL_KEY") or os.environ.get("FAL_AI_API_KEY")):
                 available_providers.append(prov)
-            elif prov == "vertex_ai" and os.environ.get("VERTEX_API_KEY"):
+            elif prov == "openai" and (os.environ.get("OPENAI_API_KEY") or os.environ.get("CHATGPT_API_KEY")):
+                available_providers.append(prov)
+            elif prov == "vertex_ai" and (os.environ.get("VERTEX_API_KEY") or os.environ.get("GEMINI_API_KEY")):
                 available_providers.append(prov)
 
         if available_providers:
@@ -339,6 +443,9 @@ class UniversalCapabilityRegistry:
             if target_provider == "arena":
                 # Arena supports reasoning_effort string
                 params["reasoning_effort"] = eff if eff != "auto" else "high"
+            elif target_provider == "openai":
+                # OpenAI o1/o3-mini supports reasoning_effort string (low, medium, high)
+                params["reasoning_effort"] = eff if eff in ("low", "medium", "high") else "medium"
             elif target_provider == "anthropic":
                 # Native Anthropic uses thinking budget tokens
                 budget = thinking_budget or (4096 if eff in ("high", "max") else 2048)

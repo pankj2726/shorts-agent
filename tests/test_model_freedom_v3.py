@@ -9,11 +9,12 @@ from agent.modules.capability_registry import UniversalCapabilityRegistry
 from agent.modules.access_policy import ModelAccessPolicy
 from agent.modules.model_discovery import DynamicModelDiscovery
 from agent.modules.anthropic_adapter import AnthropicAdapter
+from agent.modules.openai_adapter import OpenAIAdapter
 
 
 def test_universal_capability_registry():
     models = UniversalCapabilityRegistry.get_all_models()
-    assert len(models) >= 7
+    assert len(models) >= 10
 
     # Test setting active model
     assert UniversalCapabilityRegistry.set_active_model("deepseek-r1") is True
@@ -90,3 +91,19 @@ def test_dynamic_discovery_caching():
     models = DynamicModelDiscovery.discover_all(force_refresh=False)
     assert isinstance(models, list)
     assert len(models) >= 3
+
+
+def test_openai_adapter_structure():
+    with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test-openai-key", "OPENAI_ORG_ID": "org-openai-test"}):
+        headers = OpenAIAdapter.get_headers()
+        assert headers["Authorization"] == "Bearer sk-test-openai-key"
+        assert headers["OpenAI-Organization"] == "org-openai-test"
+
+    # Test reasoning effort translation for o3-mini
+    o3_params = UniversalCapabilityRegistry.translate_parameters(
+        canonical_id="o3-mini",
+        target_provider="openai",
+        effort="high"
+    )
+    assert o3_params["model"] == "o3-mini"
+    assert o3_params["reasoning_effort"] == "high"

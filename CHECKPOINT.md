@@ -13,19 +13,26 @@
     - Decoupled model selection from consumer plan boundaries.
     - Dynamic status resolution (`AVAILABLE`, `RESTRICTED`, `UNSUPPORTED`).
     - Dynamic parameter translator mapping effort levels (`low`, `medium`, `high`, `max`) to native API parameters.
+    - Integrated OpenAI (`gpt-4o`, `o3-mini`, `o1`) and Claude 3.7 Sonnet (`claude-3-7-sonnet`).
+  - **Direct OpenAI Adapter (`agent/modules/openai_adapter.py`):**
+    - Native support for OpenAI/ChatGPT API keys (`OPENAI_API_KEY`), Organization IDs, and Project IDs.
+    - Native `reasoning_effort` translation for `o1` and `o3-mini` (low/medium/high).
+  - **Direct Claude Console / Anthropic Adapter (`agent/modules/anthropic_adapter.py`):**
+    - Native support for Claude API keys, Organization IDs, and Workload Identity Federation (WIF).
+    - Native thinking budget calculations (`low`: 2048, `medium`: 8192, `high`: 16384, `max`: 32768 tokens).
+  - **Secure Ingestion Utility (`scripts/ingest_api_keys.py`):**
+    - Masked input CLI for safe ingestion of Claude, ChatGPT, and Vertex AI keys (Rule 4 compliant).
+    - Automatic Cloudflare R2 asymmetric vault synchronization.
   - **Model Access Policy Engine (`agent/modules/access_policy.py`):**
     - Neutral operational checks: user authentication, provider connectivity, model availability, quota sufficiency.
     - Zero consumer subscription upselling or upgrade prompts.
   - **Dynamic Multi-Provider Discovery (`agent/modules/model_discovery.py`):**
-    - Automatic dynamic discovery across Arena, OpenRouter, Groq, and Anthropic.
+    - Automatic dynamic discovery across Arena, OpenRouter, Groq, Anthropic, and OpenAI.
     - In-memory 1-hour TTL caching for sub-millisecond lookups.
-  - **Direct Claude Console / Anthropic Adapter (`agent/modules/anthropic_adapter.py`):**
-    - Native support for Claude API keys, Organization IDs, and Workload Identity Federation (WIF).
-    - Native thinking budget calculations (`low`: 2048, `medium`: 8192, `high`: 16384, `max`: 32768 tokens).
   - **Interactive CLI & Telegram Selector (`scripts/model_catalog_cli.py` & `telegram_control.py`):**
     - CLI supports `--select <model_id>`, `--effort <level>`, `--refresh`.
     - Telegram supports `/models [filter]`, `/model <id>`, `/effort <level>`, `/refresh_models`.
-  - **All V3 Unit Tests Passing:** 5/5 in `tests/test_model_freedom_v3.py`.
+  - **All V3 Unit Tests Passing:** 6/6 in `tests/test_model_freedom_v3.py`.
 
 - [x] **Workspace Identity Gateway (WIG) Implementation Complete:**
   - **Auto-Switching 429 & Busy Failover Engine (`omniroute_embedded.py`):**

@@ -169,7 +169,7 @@ class EmbeddedOmniRoute:
         else:
             primary_prov = model_status.get("primary_provider", "arena")
             # Build intelligent chain putting the model's preferred provider first, followed by resilient fallbacks
-            all_provs = ["arena", "openrouter", "groq", "deepinfra", "pollinations"]
+            all_provs = ["anthropic", "openai", "arena", "openrouter", "groq", "deepinfra", "pollinations"]
             chain = [primary_prov] + [p for p in all_provs if p != primary_prov]
 
         last_error = None
@@ -191,6 +191,40 @@ class EmbeddedOmniRoute:
                     res["canonical_model"] = active_canonical
                     res["effort"] = active_effort
                     return res
+
+                elif prov == "anthropic" and (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("CLAUDE_API_KEY")):
+                    from agent.modules.anthropic_adapter import AnthropicAdapter
+                    res = AnthropicAdapter.complete(
+                        model=target_model,
+                        messages=[{"role": "user", "content": prompt}],
+                        system=system_prompt,
+                        reasoning_effort=active_effort,
+                        timeout=timeout
+                    )
+                    if res.get("status") == "success":
+                        res["attempt_history"] = attempt_history
+                        res["canonical_model"] = active_canonical
+                        res["effort"] = active_effort
+                        return res
+                    else:
+                        raise RuntimeError(res.get("error", "Anthropic call failed"))
+
+                elif prov == "openai" and (os.environ.get("OPENAI_API_KEY") or os.environ.get("CHATGPT_API_KEY")):
+                    from agent.modules.openai_adapter import OpenAIAdapter
+                    res = OpenAIAdapter.complete(
+                        model=target_model,
+                        messages=[{"role": "user", "content": prompt}],
+                        system=system_prompt,
+                        reasoning_effort=active_effort,
+                        timeout=timeout
+                    )
+                    if res.get("status") == "success":
+                        res["attempt_history"] = attempt_history
+                        res["canonical_model"] = active_canonical
+                        res["effort"] = active_effort
+                        return res
+                    else:
+                        raise RuntimeError(res.get("error", "OpenAI call failed"))
 
                 elif prov == "openrouter" and os.environ.get("OPENROUTER_API_KEY"):
                     res = self._call_openrouter_text(prompt, system_prompt, target_model, timeout)

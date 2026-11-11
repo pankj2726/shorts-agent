@@ -171,8 +171,18 @@ class DynamicModelDiscovery:
         # 3. Discover from Groq
         all_models.extend(cls.discover_groq_models())
         # 4. Include Anthropic Adapter baseline
-        from agent.modules.anthropic_adapter import AnthropicAdapter
-        all_models.extend(AnthropicAdapter.discover_models())
+        try:
+            from agent.modules.anthropic_adapter import AnthropicAdapter
+            all_models.extend(AnthropicAdapter.discover_models())
+        except Exception:
+            pass
+
+        # 5. Include OpenAI Adapter baseline
+        try:
+            from agent.modules.openai_adapter import OpenAIAdapter
+            all_models.extend(OpenAIAdapter.discover_models())
+        except Exception:
+            pass
 
         # 5. Always include baseline free models if discovery returned few items
         if len(all_models) < 3:
