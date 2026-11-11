@@ -41,14 +41,20 @@
   - Kinetic typography highlights and sound effect cue assignments.
   - Unit tests verified: `tests/test_storyboard.py` (3/3 passing).
 
+- [x] **Multi-Modal Visual & Reference Ingestion Engine (`ingest.py`):**
+  - Ingests reference YouTube Shorts URLs (extracts video ID, hook formula, pacing).
+  - Analyzes brand assets and images to extract aesthetic color palettes and stylistic prompts.
+  - Fuses multi-modal inputs into unified production briefs (`fuse_inputs`).
+  - Unit tests verified: `tests/test_ingest.py` (4/4 passing).
+
 ---
 
 ## 2. Next
 
 - [ ] **Phase 4 YouTube Upload Test:**
   - Test `publish.upload_short()` for `video_1_final.mp4` in unlisted mode upon explicit user approval.
-- [ ] **Multi-Modal Visual Ingestion:**
-  - Ingest reference images and video URLs directly into storyboard prompts.
+- [ ] **End-to-End Orchestrated Pipeline Run:**
+  - Execute full cycle from Trend Radar -> Ingestion -> Storyboard -> Render -> QA2 -> Notification.
 
 ---
 
