@@ -173,6 +173,8 @@ class ShortsForgeCommandHandler:
             return self._cmd_status()
         elif command in ("/models", "/model"):
             return self._cmd_models(arg)
+        elif command in ("/refresh_models", "/refresh"):
+            return self._cmd_refresh_models()
         elif command == "/effort":
             return self._cmd_effort(arg)
         elif command == "/trends":
@@ -222,22 +224,43 @@ class ShortsForgeCommandHandler:
 
     def _cmd_models(self, arg: str) -> str:
         from agent.modules.capability_registry import UniversalCapabilityRegistry
+        from agent.modules.access_policy import ModelAccessPolicy
 
-        if arg:
+        if arg and not arg.lower() in ("all", "arena", "openrouter", "groq", "free", "reasoning"):
             success = UniversalCapabilityRegistry.set_active_model(arg)
             if success:
                 active = UniversalCapabilityRegistry.get_active_model()
                 stat = UniversalCapabilityRegistry.get_model_status(active)
-                notify(
-                    "MODEL_SWITCHED",
-                    f"🔄 <b>Active Model Switched!</b>\n\n"
-                    f"<b>Model:</b> <code>{stat['display_name']}</code>\n"
-                    f"<b>Provider:</b> <code>{stat.get('primary_provider', 'auto')}</code>\n"
-                    f"<b>Tier:</b> <code>{stat.get('cost_tier', 'free')}</code>\n"
-                    f"<b>Status:</b> ✅ <code>AVAILABLE</code>",
-                    level="success"
+                primary_prov = stat.get("primary_provider", "arena")
+
+                # Validate with ModelAccessPolicy
+                eval_res = ModelAccessPolicy.evaluate(
+                    user_authenticated=True,
+                    provider_id=primary_prov,
+                    model_id=active
                 )
-                return f"MODEL_SWITCHED_{active}"
+
+                if eval_res.allowed:
+                    notify(
+                        "MODEL_SWITCHED",
+                        f"🔄 <b>Active Brain Switched!</b>\n\n"
+                        f"<b>Model:</b> <code>{stat['display_name']}</code>\n"
+                        f"<b>Provider:</b> <code>{primary_prov}</code>\n"
+                        f"<b>Tier:</b> <code>{stat.get('cost_tier', 'free')}</code>\n"
+                        f"<b>Status:</b> ✅ <code>{eval_res.status_code}</code>\n"
+                        f"<i>Subscription restrictions decoupled. Authorized under organization credentials.</i>",
+                        level="success"
+                    )
+                    return f"MODEL_SWITCHED_{active}"
+                else:
+                    notify(
+                        "MODEL_RESTRICTED",
+                        f"🔒 <b>Model Access Restricted:</b> <code>{stat['display_name']}</code>\n\n"
+                        f"<b>Reason:</b> {eval_res.message}\n"
+                        f"<b>Resolution:</b> {eval_res.remediation_hint or 'Contact organization admin.'}",
+                        level="warn"
+                    )
+                    return f"MODEL_RESTRICTED_{eval_res.status_code}"
             else:
                 notify(
                     "MODEL_SWITCH_ERROR",
@@ -247,28 +270,56 @@ class ShortsForgeCommandHandler:
                 )
                 return "MODEL_NOT_FOUND"
 
-        # List all models
+        # List models (with optional filter)
         models = UniversalCapabilityRegistry.get_all_models()
         active = UniversalCapabilityRegistry.get_active_model()
         active_eff = UniversalCapabilityRegistry.get_active_effort()
 
+        filter_tag = arg.lower() if arg else "all"
+        filtered = []
+        for m in models:
+            if filter_tag == "all":
+                filtered.append(m)
+            elif filter_tag == "free" and m.get("cost_tier") == "free":
+                filtered.append(m)
+            elif filter_tag == "reasoning" and m.get("capabilities", {}).get("reasoning_effort"):
+                filtered.append(m)
+            elif filter_tag in m.get("canonical_id", "").lower() or filter_tag in m.get("primary_provider", "").lower():
+                filtered.append(m)
+
+        if not filtered:
+            filtered = models
+
         lines = [
-            "🧠 <b>Universal Model Capability Hub</b>\n",
-            f"<b>Current Active Brain:</b> <code>{active}</code> (Effort: <code>{active_eff.upper()}</code>)\n",
-            "<b>Available Frontier & Free Models:</b>"
+            f"🧠 <b>Universal Model Freedom Hub</b> [Filter: <code>{filter_tag.upper()}</code>]\n",
+            f"<b>Active Model:</b> <code>{active}</code> (Effort: <code>{active_eff.upper()}</code>)\n",
+            "<b>Connected & Discovered Models:</b>"
         ]
 
-        for m in models:
+        for m in filtered:
             bullet = "⭐️" if m["is_active"] else "•"
             status_tag = "✅" if m["status"] == "AVAILABLE" else "🔒"
             lines.append(f"{bullet} {status_tag} <b>{m['display_name']}</b> (<code>{m['canonical_id']}</code>)")
             lines.append(f"   Provider: <i>{m.get('primary_provider', 'N/A')}</i> | Tier: <code>{m.get('cost_tier', 'free')}</code>")
 
-        lines.append("\n<i>To switch, type: <code>/model &lt;name&gt;</code></i>")
-        lines.append("<i>Example: <code>/model claude</code> or <code>/model deepseek</code></i>")
+        lines.append("\n<i>Switch: <code>/model &lt;name&gt;</code> | Filter: <code>/models free</code> | Refresh: <code>/refresh_models</code></i>")
 
         notify("MODEL_CATALOG", "\n".join(lines), level="info")
         return "MODELS_DELIVERED"
+
+    def _cmd_refresh_models(self) -> str:
+        from agent.modules.model_discovery import DynamicModelDiscovery
+        notify("DISCOVERY_RUNNING", "🔍 <b>Querying connected AI providers & routers for live models...</b>", level="info")
+        discovered = DynamicModelDiscovery.discover_all(force_refresh=True)
+        count = len(discovered)
+        notify(
+            "DISCOVERY_COMPLETE",
+            f"✅ <b>Model Discovery Complete!</b>\n\n"
+            f"Discovered <b>{count} models</b> across Arena.AI, OpenRouter, Groq, Anthropic, and local endpoints.\n"
+            "Type <code>/models</code> to view the updated catalog.",
+            level="success"
+        )
+        return f"DISCOVERY_COMPLETE_{count}"
 
     def _cmd_effort(self, arg: str) -> str:
         from agent.modules.capability_registry import UniversalCapabilityRegistry
