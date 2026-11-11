@@ -243,7 +243,7 @@ def run_analytics() -> None:
 
 
 def run_commands() -> None:
-    """Handle all Shorts Forge operator commands with access control and audit logging."""
+    """Handle all Shorts Forge operator commands with access control and audit logging (single pass)."""
     from agent.modules.notify import poll_updates
     from agent.modules.telegram_control import ShortsForgeCommandHandler
 
@@ -255,6 +255,29 @@ def run_commands() -> None:
         res = handler.process_update(upd)
         if res:
             logger.info("commands: Handled Telegram update -> %s", res)
+
+
+def run_poll() -> None:
+    """Continuously long-poll Telegram for instant (<1s) command responses."""
+    from agent.modules.notify import poll_updates
+    from agent.modules.telegram_control import ShortsForgeCommandHandler
+
+    handler = ShortsForgeCommandHandler()
+    logger.info("📡 Starting real-time Telegram polling daemon (<1s response)... Press Ctrl+C to stop.")
+    last_offset = 0
+
+    try:
+        while True:
+            updates = poll_updates(offset=last_offset, timeout=25)
+            for upd in updates:
+                upd_id = upd.get("update_id", 0)
+                if upd_id >= last_offset:
+                    last_offset = upd_id + 1
+                res = handler.process_update(upd)
+                if res:
+                    logger.info("poll: Handled Telegram update (%d) -> %s", upd_id, res)
+    except KeyboardInterrupt:
+        logger.info("poll: Telegram polling stopped by user.")
 
 
 def _set_repo_variable(name: str, value: str) -> None:
@@ -406,6 +429,7 @@ if __name__ == "__main__":
         "engage": run_engage,
         "analytics": run_analytics,
         "commands": run_commands,
+        "poll": run_poll,
         "smoke": run_smoke,
         "comms": show_comms_log,
         "handshake": run_handshake,
