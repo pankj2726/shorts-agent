@@ -1,11 +1,17 @@
 # Project Checkpoint: YouTube Shorts Agent
 
-**Updated:** 2026-11-11 10:25 IST  
-**Current Phase:** Embedded In-Project Router Deployed → Model Catalog Scanned → Always-On Cloud Architecture
+**Updated:** 2026-11-11 10:33 IST  
+**Current Phase:** OmniRoute Authenticated & Verified Live → Multi-Provider Workforce Routing
 
 ---
 
 ## 1. Done
+
+- [x] **OmniRoute Credential Ingestion & Verification:**
+  - Securely ingested credential from temporary document into `C:\Secrets\shorts-agent.env` without exposing secrets to chat or logs.
+  - Destroyed temporary file (`OMNIROUTE PASS.txt`).
+  - Handshake health probe executed: **OmniRoute status `SET | [OK] PASS`** ✅.
+  - Active / verified live providers: **2 Connected** (OmniRoute + Pollinations AI).
 
 - [x] **In-Project Embedded Router (`omniroute_embedded.py`):**
   - Solves the local server dependency: eliminates the need to keep PowerShell or a local PC running.
@@ -35,9 +41,9 @@
 ## 2. Next
 
 - [ ] **Handshake Verification in GitHub Actions:**
-  - User triggers `.github/workflows/provider_handshake.yml` on GitHub to verify credentials in the `production` environment.
-- [ ] **Cloudflare Worker / Free Serverless Gateway Deployment:**
-  - Optional: Deploy standalone lightweight proxy on Cloudflare Workers (100k free req/day) for continuous 24/7 external API access.
+  - Verify remaining providers in `production` environment via `.github/workflows/provider_handshake.yml`.
+- [ ] **Model Router Registration:**
+  - Register OmniRoute models into `agent/modules/tester_router.py` for automated short script generation.
 - [ ] **Phase 4 YouTube Upload Test:**
   - Test `publish.upload_short()` for `video_1_final.mp4` in unlisted mode upon user approval.
 
@@ -45,12 +51,12 @@
 
 ## 3. What the User Must Do
 
-1. **Verify in GitHub Actions:** Navigate to GitHub Actions → Select **Provider Handshake Verification** → Click **Run workflow** (uses `production` secrets).
-2. Or to test locally, ensure keys are inside `C:\Secrets\shorts-agent.env`.
+1. **GitHub Environment Secrets:** Add `OMNIROUTE_API_KEY` to GitHub repository `Settings` → `Environments` → `production` so that cloud workflows can also use it.
+2. Reply with the next task or directive.
 
 ---
 
 ## 4. R2 & Drive Storage
 
-- Last saved: `SAVED: shorts-agent at 20261111-095233` (42 MB / 8192 MB)
+- Last saved: `SAVED: shorts-agent at 20261111-102602` (42 MB / 8192 MB)
 - Status: ✅ Well within limits (42 MB / 8 GB limit)
