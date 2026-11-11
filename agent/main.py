@@ -243,43 +243,18 @@ def run_analytics() -> None:
 
 
 def run_commands() -> None:
-    """Handle /status /pause /resume from Telegram."""
-    from agent.modules.notify import poll_updates, notify, answer_callback
+    """Handle all Shorts Forge operator commands with access control and audit logging."""
+    from agent.modules.notify import poll_updates
+    from agent.modules.telegram_control import ShortsForgeCommandHandler
 
-    allowed_chat = os.environ.get("TELEGRAM_CHAT_ID", "")
+    handler = ShortsForgeCommandHandler()
     updates = poll_updates(offset=0, timeout=0)  # non-blocking
+    logger.info("commands: Polled %d update(s) from Telegram", len(updates))
 
     for upd in updates:
-        msg = upd.get("message", {})
-        chat_id = str(msg.get("chat", {}).get("id", ""))
-        if chat_id != allowed_chat:
-            continue
-        text = msg.get("text", "").strip().lower()
-
-        if text == "/status":
-            from agent.modules import quota as q
-            from agent.modules.db import get_conn
-            qs = q.daily_summary()
-            conn = get_conn()
-            last_run = conn.execute(
-                "SELECT run_type, status, started_at FROM runs ORDER BY id DESC LIMIT 1"
-            ).fetchone()
-            conn.close()
-            status_text = (
-                f"🟢 Status\n"
-                f"Quota: {qs['used']}u used / {qs['remaining']}u left\n"
-                f"Last run: {dict(last_run) if last_run else 'none'}\n"
-                f"PAUSE_PUBLISHING: {os.environ.get('PAUSE_PUBLISHING', 'false')}"
-            )
-            notify("STATUS", status_text, level="info")
-
-        elif text == "/pause":
-            _set_repo_variable("PAUSE_PUBLISHING", "true")
-            notify("AUTO_PAUSE", "⏸ Publishing paused by operator command", level="warn")
-
-        elif text == "/resume":
-            _set_repo_variable("PAUSE_PUBLISHING", "false")
-            notify("RESUMED", "▶️ Publishing resumed by operator command", level="success")
+        res = handler.process_update(upd)
+        if res:
+            logger.info("commands: Handled Telegram update -> %s", res)
 
 
 def _set_repo_variable(name: str, value: str) -> None:
