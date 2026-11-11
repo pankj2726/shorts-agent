@@ -8,9 +8,10 @@
 ## 1. Done
 
 - [x] **Directive 6.1 Multi-Provider Handshake & Credential Ingestion:**
-  - Securely ingested 24 project credentials and variables from temporary logs into `C:\Secrets\shorts-agent.env`.
-  - Securely overwritten with zeros and permanently deleted `C:\Users\Pankaj Bhati\OneDrive\TempLogs\variables.txt` (Zero chat/output exposure).
-  - Executed non-billable live health check probes across all target provider endpoints:
+  - Securely ingested 24 project credentials + **Arena.AI TokenRouter (`ARENA_API_KEY`)** into `C:\Secrets\shorts-agent.env`.
+  - Securely overwritten with zeros and permanently deleted `variables.txt` (Zero chat/output exposure).
+  - Executed non-billable live health check probes across all target provider endpoints ($0.00 spent):
+    - **Arena.AI TokenRouter (`ARENA_API_KEY`):** ✅ PASSED (Models available: `claude-coding-router-preview`, `coding-router-preview`, `claude-fable-5-1`).
     - **OpenRouter (`OPENROUTER_API_KEY`):** ✅ PASSED (Access to 25+ free models: Gemini 2.0 Flash, Llama 3.3 70B, DeepSeek R1, Qwen 2.5).
     - **DeepInfra (`DEEPINFRA_API_KEY`):** ✅ PASSED (Fast serverless inference for Llama, Qwen, Mistral, and Whisper).
     - **fal.ai (`FAL_KEY` / `FAL_AI_API_KEY`):** ✅ PASSED (Ultra-fast Flux, SDXL, and generative video generation).
@@ -19,7 +20,7 @@
     - **OpenCode (`OPENCODE_API_KEY`):** ✅ PASSED (Coding models & agent review).
     - **Pollinations AI (`POLLINATIONS_API_KEY`):** ✅ PASSED (Free Flux vertical 1080×1920 scene synthesis).
     - **Gemini, Groq, YouTube OAuth, Telegram Bot:** ✅ All securely configured in `C:\Secrets\shorts-agent.env`.
-  - Expanded `agent/modules/omniroute_embedded.py` with in-process routing for DeepInfra, OpenRouter, and Pollinations fallback chains.
+  - Expanded `agent/modules/omniroute_embedded.py` with in-process routing for Arena.AI, DeepInfra, OpenRouter, and Pollinations fallback chains.
 
 - [x] **Stage 1 — Real-Time Telegram Polling Daemon & Cloudflare Webhook:**
   - Added continuous long-polling listener: `python -m agent.main poll` providing instant (<1s) command responses.

@@ -181,6 +181,17 @@ PROVIDER_SPECS: Dict[str, Dict[str, Any]] = {
         "google_workspace_auth": "Sign in with Google Workspace on opencode.ai or configure local endpoint",
         "description": "Code generation, code review, and coding-specific model routing.",
     },
+    "arena": {
+        "display_name": "Arena AI (TokenRouter)",
+        "secret_name": "ARENA_API_KEY",
+        "required": False,
+        "base_url": "https://api.arena.ai/v1",
+        "probe_url": "https://api.arena.ai/v1/models",
+        "auth_type": "bearer",
+        "auth_header": "Authorization",
+        "google_workspace_auth": "Sign in with Google Workspace on platform.arena.ai -> Keys",
+        "description": "Meta-router & intelligent coding agent orchestrator with Max and coding-router.",
+    },
 }
 
 
