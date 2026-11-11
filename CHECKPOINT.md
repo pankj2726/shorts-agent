@@ -28,6 +28,11 @@
   - Implemented opportunity scoring algorithm and chaos detector.
   - Automated via `.github/workflows/trend_radar_digest.yml`.
 
+- [x] **Frame-by-Frame Storyboard Engine (`storyboard.py`):**
+  - High-retention pacing enforcement (<= 4.0s cuts, Hook -> Demo -> Payoff -> CTA).
+  - Kinetic typography highlights and sound effect cue assignments.
+  - Unit tests verified: `tests/test_storyboard.py` (3/3 passing).
+
 - [x] **100-Point Explainable Viral Potential Model (`viral_score.py`):**
   - 8-dimension weighted heuristic model with actionable editing revisions.
 
@@ -37,8 +42,6 @@
 
 - [ ] **Phase 4 YouTube Upload Test:**
   - Test `publish.upload_short()` for `video_1_final.mp4` in unlisted mode upon explicit user approval.
-- [ ] **Frame-by-Frame Storyboard Engine:**
-  - Build `agent/modules/storyboard.py` to convert 4-input prompts into production-ready JSON storyboard sheets.
 - [ ] **Telegram Studio Bot Commands:**
   - Add `/trends` and `/create` command handlers in `agent/modules/notify.py` / `agent/modules/comments.py`.
 
