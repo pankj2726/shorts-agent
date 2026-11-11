@@ -1,0 +1,18 @@
+version: "3.8"
+
+services:
+  shorts-agent:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    container_name: shorts-agent
+    restart: unless-stopped
+    ports:
+      - "20128:20128"
+    environment:
+      - OMNIROUTE_BASE_URL=http://localhost:20128/v1
+      - POLLINATIONS_DEFAULT_MODEL=openai
+    volumes:
+      - ../../agent/state:/app/agent/state
+      - ../../temp:/app/temp
+      - ../../logs:/app/logs

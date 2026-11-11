@@ -1,0 +1,7 @@
+name = "shorts-omniroute-edge"
+main = "worker.js"
+compatibility_date = "2024-11-01"
+
+# Free tier settings: 100,000 requests/day at $0.00 cost
+[placement]
+mode = "smart"
