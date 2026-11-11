@@ -22,6 +22,27 @@ import time
 import urllib.request
 import urllib.error
 from typing import Any, Dict, List, Optional
+from pathlib import Path
+
+# Safe environment loader
+def _load_env_safe() -> None:
+    for c in [Path(r"C:\Secrets\shorts-agent.env"), Path(r"C:\Secrets\.env"), Path(".env")]:
+        if c.exists():
+            try:
+                with open(c, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith("#") or "=" not in line:
+                            continue
+                        k, v = line.split("=", 1)
+                        k, v = k.strip(), v.strip().strip('"').strip("'")
+                        if k and not os.environ.get(k):
+                            os.environ[k] = v
+            except Exception:
+                pass
+            break
+
+_load_env_safe()
 
 logger = logging.getLogger(__name__)
 
