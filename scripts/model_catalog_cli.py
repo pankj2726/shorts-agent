@@ -6,6 +6,7 @@ Demonstrates unified discovery, parameter translation, and ModelAccessPolicy eva
 Zero consumer subscription upselling; strictly honors organization credentials.
 """
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -20,6 +21,26 @@ from agent.modules.model_discovery import DynamicModelDiscovery
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Model Freedom Initiative CLI")
+    parser.add_argument("--select", "-s", type=str, help="Select active model by canonical ID")
+    parser.add_argument("--effort", "-e", type=str, choices=["low", "medium", "high", "max"], help="Set reasoning effort level")
+    parser.add_argument("--refresh", "-r", action="store_true", help="Force refresh dynamic discovery")
+    args = parser.parse_args()
+
+    if args.select:
+        success = UniversalCapabilityRegistry.set_active_model(args.select)
+        if success:
+            print(f"-> Active model switched to: {args.select}")
+        else:
+            print(f"-> Failed to set model {args.select} (unknown model)")
+
+    if args.effort:
+        success = UniversalCapabilityRegistry.set_active_effort(args.effort)
+        if success:
+            print(f"-> Active reasoning effort set to: {args.effort.upper()}")
+        else:
+            print(f"-> Failed to set effort level {args.effort}")
+
     print("=" * 80)
     print(" SHORTS FORGE — MODEL FREEDOM INITIATIVE (V3): Unified Model Discovery")
     print("=" * 80)
@@ -28,7 +49,7 @@ def main():
 
     # 1. Dynamic Discovery
     print("1. Running Dynamic Model Discovery across connected endpoints...")
-    discovered = DynamicModelDiscovery.discover_all(force_refresh=False)
+    discovered = DynamicModelDiscovery.discover_all(force_refresh=args.refresh)
     print(f"   Discovered {len(discovered)} total models across connected providers.")
     print("-" * 80)
 
@@ -54,9 +75,12 @@ def main():
     print(f"Active Model: {active} | Active Effort: {effort.upper()}")
 
     # 3. ModelAccessPolicy Check
+    active_entry = next((item for item in models if item["canonical_id"] == active), {})
+    primary_prov = active_entry.get("primary_provider", "arena")
+
     policy_res = ModelAccessPolicy.evaluate(
         user_authenticated=True,
-        provider_id="arena",
+        provider_id=primary_prov,
         model_id=active
     )
     print(f"Access Policy: {'ALLOWED' if policy_res.allowed else 'RESTRICTED'} ({policy_res.status_code})")

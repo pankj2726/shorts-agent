@@ -1,25 +1,31 @@
 # Project Checkpoint: YouTube Shorts Agent (Shorts Forge)
 
-**Updated:** 2026-11-11 15:35 IST  
-**Current Phase:** Model Freedom Initiative (MFI) Implemented & Telegram Model Selector Live
+**Updated:** 2026-11-11 16:10 IST  
+**Current Phase:** Model Freedom Initiative V3 Complete — Organization Auth Active & Setup Guide Delivered
 
 ---
 
 ## 1. Done
 
-- [x] **Model Freedom Initiative (Phase 4 Implementation Complete):**
+- [x] **Model Freedom Initiative V3 (Decoupled Model Selection & Organization Auth):**
   - **Universal Capability Registry (`agent/modules/capability_registry.py`):**
-    - Decoupled model selection from consumer subscription gates.
-    - Defined canonical model mappings across Arena.AI, OpenRouter, Groq, DeepInfra, and Google Vertex AI.
-    - Live capability tracking: reasoning effort levels (`low`, `medium`, `high`, `max`), thinking budgets, tool calling, and context limits.
-  - **Dynamic Parameter Normalization (`omniroute_embedded.py`):**
-    - Automatically routes prompts based on the currently selected canonical model and effort depth.
-    - Auto-translates effort to provider-native payloads (`reasoning_effort: high` on Arena, thinking budgets on Anthropic/Gemini) while safely omitting parameters on non-reasoning models.
-  - **Telegram Model Freedom Interface (`telegram_control.py`):**
-    - Added `/models` command: Displays live catalog of models, active brain, and latency.
-    - Added `/model <name>`: Instantly switches active model from Android phone or desktop (e.g. `/model claude`, `/model deepseek`).
-    - Added `/effort <low|medium|high|max>`: Toggles thinking depth dynamically.
-    - Unit tests verified: `tests/test_telegram_control.py` (7/7 passing in 0.68s).
+    - Removed all application-level subscription tiers and upgrade locks.
+    - Decoupled model selection from consumer plan boundaries.
+    - Dynamic status resolution (`AVAILABLE`, `RESTRICTED`, `UNSUPPORTED`).
+    - Dynamic parameter translator mapping effort levels (`low`, `medium`, `high`, `max`) to native API parameters.
+  - **Model Access Policy Engine (`agent/modules/access_policy.py`):**
+    - Neutral operational checks: user authentication, provider connectivity, model availability, quota sufficiency.
+    - Zero consumer subscription upselling or upgrade prompts.
+  - **Dynamic Multi-Provider Discovery (`agent/modules/model_discovery.py`):**
+    - Automatic dynamic discovery across Arena, OpenRouter, Groq, and Anthropic.
+    - In-memory 1-hour TTL caching for sub-millisecond lookups.
+  - **Direct Claude Console / Anthropic Adapter (`agent/modules/anthropic_adapter.py`):**
+    - Native support for Claude API keys, Organization IDs, and Workload Identity Federation (WIF).
+    - Native thinking budget calculations (`low`: 2048, `medium`: 8192, `high`: 16384, `max`: 32768 tokens).
+  - **Interactive CLI & Telegram Selector (`scripts/model_catalog_cli.py` & `telegram_control.py`):**
+    - CLI supports `--select <model_id>`, `--effort <level>`, `--refresh`.
+    - Telegram supports `/models [filter]`, `/model <id>`, `/effort <level>`, `/refresh_models`.
+  - **All V3 Unit Tests Passing:** 5/5 in `tests/test_model_freedom_v3.py`.
 
 - [x] **Workspace Identity Gateway (WIG) Implementation Complete:**
   - **Auto-Switching 429 & Busy Failover Engine (`omniroute_embedded.py`):**
