@@ -124,3 +124,25 @@ def test_callback_approval(mock_answer, mock_notify):
     }
     result = handler.process_update(update_cb)
     assert result == "APPROVED_42"
+
+
+@patch.dict("os.environ", {"TELEGRAM_CHAT_ID": "12345678"})
+@patch("agent.modules.telegram_control.notify")
+def test_models_and_effort_commands(mock_notify):
+    handler = ShortsForgeCommandHandler()
+
+    # Test /models listing
+    up_models = {"message": {"chat": {"id": 12345678}, "text": "/models"}}
+    assert handler.process_update(up_models) == "MODELS_DELIVERED"
+
+    # Test /model switch to deepseek
+    up_switch = {"message": {"chat": {"id": 12345678}, "text": "/model deepseek"}}
+    assert handler.process_update(up_switch) == "MODEL_SWITCHED_deepseek-r1"
+
+    # Test /effort status
+    up_eff = {"message": {"chat": {"id": 12345678}, "text": "/effort"}}
+    assert handler.process_update(up_eff) == "EFFORT_DELIVERED"
+
+    # Test /effort set max
+    up_eff_set = {"message": {"chat": {"id": 12345678}, "text": "/effort max"}}
+    assert handler.process_update(up_eff_set) == "EFFORT_SET_max"

@@ -171,6 +171,10 @@ class ShortsForgeCommandHandler:
             return self._cmd_help()
         elif command == "/status":
             return self._cmd_status()
+        elif command in ("/models", "/model"):
+            return self._cmd_models(arg)
+        elif command == "/effort":
+            return self._cmd_effort(arg)
         elif command == "/trends":
             return self._cmd_trends(arg)
         elif command == "/create":
@@ -196,6 +200,10 @@ class ShortsForgeCommandHandler:
     def _cmd_help(self) -> str:
         help_text = (
             "🛠 <b>SHORTS FORGE — Master Operator Console</b>\n\n"
+            "<b>Model Freedom & Intelligence:</b>\n"
+            "• <code>/models</code> — View universal catalog & active model\n"
+            "• <code>/model &lt;name&gt;</code> — Switch active model (e.g. <code>/model claude</code>, <code>/model deepseek</code>)\n"
+            "• <code>/effort &lt;low|medium|high|max&gt;</code> — Adjust reasoning & thinking depth\n\n"
             "<b>Production & Strategy:</b>\n"
             "• <code>/create &lt;topic&gt;</code> — Start autonomous 4-input production\n"
             "• <code>/trends [niche]</code> — Scan Trend Radar & Chaos Signals\n"
@@ -211,6 +219,91 @@ class ShortsForgeCommandHandler:
         )
         notify("HELP_MANUAL", help_text, level="info")
         return "HELP_DELIVERED"
+
+    def _cmd_models(self, arg: str) -> str:
+        from agent.modules.capability_registry import UniversalCapabilityRegistry
+
+        if arg:
+            success = UniversalCapabilityRegistry.set_active_model(arg)
+            if success:
+                active = UniversalCapabilityRegistry.get_active_model()
+                stat = UniversalCapabilityRegistry.get_model_status(active)
+                notify(
+                    "MODEL_SWITCHED",
+                    f"🔄 <b>Active Model Switched!</b>\n\n"
+                    f"<b>Model:</b> <code>{stat['display_name']}</code>\n"
+                    f"<b>Provider:</b> <code>{stat.get('primary_provider', 'auto')}</code>\n"
+                    f"<b>Tier:</b> <code>{stat.get('cost_tier', 'free')}</code>\n"
+                    f"<b>Status:</b> ✅ <code>AVAILABLE</code>",
+                    level="success"
+                )
+                return f"MODEL_SWITCHED_{active}"
+            else:
+                notify(
+                    "MODEL_SWITCH_ERROR",
+                    f"⚠️ Unknown model identifier: <code>{arg}</code>\n"
+                    "Type <code>/models</code> to view all valid options.",
+                    level="warn"
+                )
+                return "MODEL_NOT_FOUND"
+
+        # List all models
+        models = UniversalCapabilityRegistry.get_all_models()
+        active = UniversalCapabilityRegistry.get_active_model()
+        active_eff = UniversalCapabilityRegistry.get_active_effort()
+
+        lines = [
+            "🧠 <b>Universal Model Capability Hub</b>\n",
+            f"<b>Current Active Brain:</b> <code>{active}</code> (Effort: <code>{active_eff.upper()}</code>)\n",
+            "<b>Available Frontier & Free Models:</b>"
+        ]
+
+        for m in models:
+            bullet = "⭐️" if m["is_active"] else "•"
+            status_tag = "✅" if m["status"] == "AVAILABLE" else "🔒"
+            lines.append(f"{bullet} {status_tag} <b>{m['display_name']}</b> (<code>{m['canonical_id']}</code>)")
+            lines.append(f"   Provider: <i>{m.get('primary_provider', 'N/A')}</i> | Tier: <code>{m.get('cost_tier', 'free')}</code>")
+
+        lines.append("\n<i>To switch, type: <code>/model &lt;name&gt;</code></i>")
+        lines.append("<i>Example: <code>/model claude</code> or <code>/model deepseek</code></i>")
+
+        notify("MODEL_CATALOG", "\n".join(lines), level="info")
+        return "MODELS_DELIVERED"
+
+    def _cmd_effort(self, arg: str) -> str:
+        from agent.modules.capability_registry import UniversalCapabilityRegistry
+
+        if arg:
+            success = UniversalCapabilityRegistry.set_active_effort(arg)
+            if success:
+                eff = UniversalCapabilityRegistry.get_active_effort()
+                notify(
+                    "EFFORT_UPDATED",
+                    f"⚡️ <b>Reasoning Effort Set to: <code>{eff.upper()}</code></b>\n\n"
+                    f"Subsequent reasoning and creative turns will allocate {eff} thinking depth.",
+                    level="success"
+                )
+                return f"EFFORT_SET_{eff}"
+            else:
+                notify(
+                    "EFFORT_ERROR",
+                    f"⚠️ Invalid effort level: <code>{arg}</code>\n"
+                    "Allowed options: <code>low</code>, <code>medium</code>, <code>high</code>, <code>max</code>.",
+                    level="warn"
+                )
+                return "INVALID_EFFORT"
+
+        current_eff = UniversalCapabilityRegistry.get_active_effort()
+        msg = (
+            f"⚡️ <b>Current Reasoning Effort:</b> <code>{current_eff.upper()}</code>\n\n"
+            "<b>Available Levels:</b>\n"
+            "• <code>/effort low</code> — Fast responses, light reasoning ($0.00 conserved)\n"
+            "• <code>/effort medium</code> — Balanced standard execution\n"
+            "• <code>/effort high</code> — Deep analytical thinking (Current Default)\n"
+            "• <code>/effort max</code> — Maximum cognitive budget for viral strategy & code"
+        )
+        notify("EFFORT_STATUS", msg, level="info")
+        return "EFFORT_DELIVERED"
 
     def _cmd_status(self) -> str:
         from agent.modules import quota as q

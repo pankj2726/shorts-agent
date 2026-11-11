@@ -23,6 +23,7 @@ import urllib.request
 import urllib.error
 from typing import Any, Dict, List, Optional
 from pathlib import Path
+from agent.modules.capability_registry import UniversalCapabilityRegistry
 
 # Safe environment loader
 def _load_env_safe() -> None:
@@ -148,7 +149,8 @@ class EmbeddedOmniRoute:
         self,
         prompt: str,
         system_prompt: Optional[str] = None,
-        model: str = "openai/gpt-5.4-nano",
+        model: Optional[str] = None,
+        effort: Optional[str] = None,
         provider_preference: Optional[List[str]] = None,
         timeout: int = 30
     ) -> Dict[str, Any]:
@@ -156,35 +158,66 @@ class EmbeddedOmniRoute:
         Routes text generation with automatic 429/busy fallback across eligible providers.
         Guarantees that an operation never stalls midway.
         """
-        chain = provider_preference or ["pollinations", "openrouter", "groq", "arena", "deepinfra"]
+        # Resolve active canonical model and effort from UniversalCapabilityRegistry if not explicitly provided
+        active_canonical = UniversalCapabilityRegistry.get_active_model()
+        active_effort = effort or UniversalCapabilityRegistry.get_active_effort()
+        model_status = UniversalCapabilityRegistry.get_model_status(active_canonical)
+
+        # Dynamic primary chain construction
+        if provider_preference:
+            chain = provider_preference
+        else:
+            primary_prov = model_status.get("primary_provider", "arena")
+            # Build intelligent chain putting the model's preferred provider first, followed by resilient fallbacks
+            all_provs = ["arena", "openrouter", "groq", "deepinfra", "pollinations"]
+            chain = [primary_prov] + [p for p in all_provs if p != primary_prov]
+
         last_error = None
         attempt_history = []
 
         for prov in chain:
             try:
+                # Translate parameters for this specific provider
+                p_params = UniversalCapabilityRegistry.translate_parameters(
+                    canonical_id=active_canonical,
+                    target_provider=prov,
+                    effort=active_effort
+                )
+                target_model = model or p_params.get("model", active_canonical)
+
                 if prov == "pollinations":
-                    res = self._call_pollinations_text(prompt, system_prompt, model, timeout)
+                    res = self._call_pollinations_text(prompt, system_prompt, target_model, timeout)
                     res["attempt_history"] = attempt_history
+                    res["canonical_model"] = active_canonical
+                    res["effort"] = active_effort
                     return res
 
                 elif prov == "openrouter" and os.environ.get("OPENROUTER_API_KEY"):
-                    res = self._call_openrouter_text(prompt, system_prompt, model, timeout)
+                    res = self._call_openrouter_text(prompt, system_prompt, target_model, timeout)
                     res["attempt_history"] = attempt_history
+                    res["canonical_model"] = active_canonical
+                    res["effort"] = active_effort
                     return res
 
                 elif prov == "groq" and os.environ.get("GROQ_API_KEY"):
-                    res = self._call_groq_text(prompt, system_prompt, model, timeout)
+                    res = self._call_groq_text(prompt, system_prompt, target_model, timeout)
                     res["attempt_history"] = attempt_history
+                    res["canonical_model"] = active_canonical
+                    res["effort"] = active_effort
                     return res
 
                 elif prov == "arena" and os.environ.get("ARENA_API_KEY"):
-                    res = self._call_arena_text(prompt, system_prompt, model, timeout)
+                    res = self._call_arena_text(prompt, system_prompt, target_model, timeout)
                     res["attempt_history"] = attempt_history
+                    res["canonical_model"] = active_canonical
+                    res["effort"] = active_effort
                     return res
 
                 elif prov == "deepinfra" and os.environ.get("DEEPINFRA_API_KEY"):
-                    res = self._call_deepinfra_text(prompt, system_prompt, model, timeout)
+                    res = self._call_deepinfra_text(prompt, system_prompt, target_model, timeout)
                     res["attempt_history"] = attempt_history
+                    res["canonical_model"] = active_canonical
+                    res["effort"] = active_effort
                     return res
 
             except Exception as e:
