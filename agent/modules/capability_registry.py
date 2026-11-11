@@ -319,6 +319,116 @@ CANONICAL_MODELS: Dict[str, Dict[str, Any]] = {
             "structured_json": True,
             "vision": True,
         }
+    },
+    "claude-3-5-haiku": {
+        "canonical_id": "claude-3-5-haiku",
+        "display_name": "Anthropic Claude 3.5 Haiku",
+        "family": "anthropic",
+        "description": "Ultra-fast lightweight Claude model for rapid iteration.",
+        "provider_mappings": {
+            "anthropic": "claude-3-5-haiku-20241022",
+            "openrouter": "anthropic/claude-3.5-haiku"
+        },
+        "default_provider": "openrouter",
+        "context_window": 200000,
+        "max_output_tokens": 8192,
+        "cost_tier": "organization_funded",
+        "capabilities": {
+            "reasoning_effort": {"supported": False, "levels": []},
+            "extended_thinking": False,
+            "thinking_budget": False,
+            "tool_calling": True,
+            "structured_json": True,
+            "vision": True,
+        }
+    },
+    "mistral-large-2411": {
+        "canonical_id": "mistral-large-2411",
+        "display_name": "Mistral Large 2 (2411)",
+        "family": "mistral",
+        "description": "Flagship 123B European reasoning and multilingual model.",
+        "provider_mappings": {
+            "deepinfra": "mistralai/Mistral-Large-Instruct-2411",
+            "openrouter": "mistralai/mistral-large-2411"
+        },
+        "default_provider": "deepinfra",
+        "context_window": 128000,
+        "max_output_tokens": 8192,
+        "cost_tier": "router_funded",
+        "capabilities": {
+            "reasoning_effort": {"supported": False, "levels": []},
+            "extended_thinking": False,
+            "thinking_budget": False,
+            "tool_calling": True,
+            "structured_json": True,
+            "vision": False,
+        }
+    },
+    "deepseek-v3": {
+        "canonical_id": "deepseek-v3",
+        "display_name": "DeepSeek V3 (671B MoE)",
+        "family": "deepseek",
+        "description": "Massive 671B parameter Mixture-of-Experts powerhouse.",
+        "provider_mappings": {
+            "openrouter": "deepseek/deepseek-chat",
+            "deepinfra": "deepseek-ai/DeepSeek-V3"
+        },
+        "default_provider": "openrouter",
+        "context_window": 64000,
+        "max_output_tokens": 8192,
+        "cost_tier": "free",
+        "capabilities": {
+            "reasoning_effort": {"supported": False, "levels": []},
+            "extended_thinking": False,
+            "thinking_budget": False,
+            "tool_calling": True,
+            "structured_json": True,
+            "vision": False,
+        }
+    },
+    "llama-3-1-405b": {
+        "canonical_id": "llama-3-1-405b",
+        "display_name": "Meta Llama 3.1 405B",
+        "family": "meta",
+        "description": "The world's largest open-weights frontier model (405 Billion parameters).",
+        "provider_mappings": {
+            "deepinfra": "meta-llama/Meta-Llama-3.1-405B-Instruct",
+            "openrouter": "meta-llama/llama-3.1-405b-instruct"
+        },
+        "default_provider": "deepinfra",
+        "context_window": 131072,
+        "max_output_tokens": 8192,
+        "cost_tier": "router_funded",
+        "capabilities": {
+            "reasoning_effort": {"supported": False, "levels": []},
+            "extended_thinking": False,
+            "thinking_budget": False,
+            "tool_calling": True,
+            "structured_json": True,
+            "vision": False,
+        }
+    },
+    "gemini-1-5-pro": {
+        "canonical_id": "gemini-1-5-pro",
+        "display_name": "Google Gemini 1.5 Pro",
+        "family": "google",
+        "description": "2 Million token long-context multimodal frontier reasoning engine.",
+        "provider_mappings": {
+            "vertex_ai": "gemini-1.5-pro",
+            "openrouter": "google/gemini-pro-1.5"
+        },
+        "default_provider": "vertex_ai",
+        "context_window": 2097152,
+        "max_output_tokens": 8192,
+        "cost_tier": "organization_funded",
+        "capabilities": {
+            "reasoning_effort": {"supported": True, "levels": ["low", "medium", "high"]},
+            "extended_thinking": True,
+            "thinking_budget": True,
+            "tool_calling": True,
+            "structured_json": True,
+            "vision": True,
+        }
     }
 }
 
