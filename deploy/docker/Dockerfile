@@ -1,5 +1,5 @@
 # Dockerfile for YouTube Shorts Agent with Embedded Router & Local OmniRoute
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 # Install system dependencies (ffmpeg, curl, git, build essentials)
 RUN apt-get update && apt-get install -y --no-install-recommends \
