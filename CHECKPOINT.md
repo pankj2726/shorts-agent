@@ -43,6 +43,12 @@
   - Inter-agent message bus logged in `logs/agent-comms.jsonl`.
   - Upgraded execution environments to Python 3.12 across all CI workflows.
 
+- [x] **Social Intelligence & Community Dynamics (`social.py` - Milestone M4):**
+  - Audience persona modeling for "QuickTech Hacks" viewer profile.
+  - Comment sentiment analysis (positive/neutral/negative and viewer question extraction).
+  - Competitor benchmark angle discovery across high-retention formats.
+  - Unit tests verified: `tests/test_social.py` (3/3 passing).
+
 - [x] **In-Project Embedded OmniRoute Router (`omniroute_embedded.py`):**
   - Solves the local server dependency: eliminates the need to keep PowerShell or a local PC running.
   - 24/7 Cloudflare Worker edge router (`deploy/cloudflare-router/worker.js`) ready at $0.00 cost (100k free requests/day).
