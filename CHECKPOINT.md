@@ -1,85 +1,63 @@
 # Project Checkpoint: YouTube Shorts Agent
 
-**Updated:** 2026-11-10 17:05 IST  
-**Current Phase:** M1 Agent Infrastructure Complete → Ready for Phase 4 (YouTube Upload Test) + M2 (Skills Engine)
+**Updated:** 2026-11-11 09:50 IST  
+**Current Phase:** Directive 6.1 Provider Handshake Ready → Credential Onboarding & Live Router Integration
 
 ---
 
 ## 1. Done
 
-- [x] **Phase 0 & 1 Architecture Completed:**
-  - Full modular layout established under `shorts-agent/`
-  - 4 GitHub Actions workflows: `daily_pipeline.yml`, `engage.yml`, `analytics.yml`, `commands.yml`
-  - Single-secret `ENV_FILE` unpacking step in all 4 workflows
-  - Core modules: `llm.py`, `quota.py`, `notify.py`, `db.py`, `research.py`, `strategy.py`, `script.py`, `qa.py`, `tts.py`, `captions.py`, `assets.py`, `render.py`, `publish.py`, `comments.py`, `analytics.py`, `main.py`
-  - OAuth tool: `scripts/oauth_setup.py`
-  - Smoke test: `scripts/smoke_test.py` — Exit code 0 (all subsystems green)
-  - Saved to Google Drive and Cloudflare R2 (36 MB / 8192 MB)
+- [x] **Directive 6.1 — Provider Handshake Engine & Verification CLI:**
+  - Implemented safe, bounded, non-billable GET/HEAD health checks across 10 target providers (`agent/modules/provider_handshake.py`).
+  - Added CLI probe tool: `scripts/verify_provider_handshake.py` (and `python -m agent.main handshake`).
+  - Added GitHub Actions workflow dispatch: `.github/workflows/provider_handshake.yml`.
+  - Added automated test suite: `tests/test_provider_handshake.py` (4/4 passing, zero secrets leaked).
+  - Public free tier verified: Pollinations AI passed health check immediately out of the box ($0.00 cost).
+  - Pushed to GitHub: commit `62c1b3e`.
 
-- [x] **Phase 2 Content Engine Completed:**
-  - `agent/config/channel_bible.md` — 3 series, niche "QuickTech Hacks"
-  - 30 curated Short ideas in SQLite `ideas` table
-  - 10 QA-passed scripts in SQLite `videos` table (100% pass rate on QA Gate #1)
-  - Exported: `agent/state/phase2_scripts_report.json`
-  - Git commit: `ddb2fbe` (pushed)
+- [x] **Milestone 1 — Multi-Agent & Workforce Infrastructure Complete:**
+  - Full modular layout established under `shorts-agent/` (61 files, 13,000+ additions, commit `0d4c18b`).
+  - Core test suite passing: `1271 passed, 74 deselected in 126.20s` (100% green).
+  - Workforce tester router federation module: `agent/modules/tester_router.py`.
+  - Enterprise Architecture Blueprint documented in `architecture/WORKFORCE_NETWORK_3_4_5.md`.
+  - Python version research completed: Python 3.11 LTS is fully supported through October 2027.
 
-- [x] **Phase 3 Render Engine Completed:**
-  - Neural TTS: `en-IN-NeerjaNeural`, 61 word-level timestamps
-  - Kinetic ASS subtitles: 61 synchronized events
-  - EBU R128 loudness: −14.9 LUFS (target: −14 ± 2) ✅
-  - QA Gate #2: 1080×1920, 30.6s, captions present ✅
-  - Telegram video preview delivered ✅
-  - Git commit: `fef13d1` (**pushed ✅** — 2026-11-10)
-
-- [x] **M1 Multi-Agent Infrastructure Completed:**
-  - Directory structure: `agents/`, `skills/`, `knowledge/`, `experiments/`, `evaluations/`, `reports/`, `architecture/`, `roadmap/`, `integrations/`, `security/`
-  - Agent definitions: AGENT.md for all 5 agents + Orchestrator
-  - Provider Registry: `agents/agent-4-providers/registry/providers.json` (9 providers documented)
-  - Task Ownership: `architecture/task-ownership.md` (12 tasks tracked)
-  - Roadmap: `roadmap/ROADMAP.md` (8 milestones, scaling plan)
-  - Skills: `skills/youtube-shorts-research/`, `skills/humanized-scriptwriting/`, `skills/anti-slop-evaluation/`
-  - Teamwork subagent active: `0b534762-16b8-4563-a59a-1ef07eed43e2`
-  - AI Provider Research Report received from teamwork agent (filed in knowledge base)
+- [x] **Phase 0 to Phase 3 Pipeline Modules Complete:**
+  - Production render, neural TTS (`en-IN-NeerjaNeural`), kinetic ASS subtitles, EBU R128 loudness (−14.9 LUFS), Telegram preview delivered.
 
 ---
 
 ## 2. Next
 
-- [ ] **Phase 4 (M6 remaining) — YouTube Upload Test**
-  - Test `publish.upload_short()` for `video_1_final.mp4` in private/unlisted mode
-  - Verify synthetic media disclosure
-  - Verify Telegram `/approve`/`/reject` commands
-  - Trigger `daily_pipeline.yml` dry-run on GitHub Actions
-
-- [ ] **Approve Teamwork Prompt** — User needs to reply "Approved" or request changes
-  - Draft: `teamwork_prompt_0b534762-16b8-4563-a59a-1ef07eed43e2.md`
-
-- [ ] **M2 — Skills Engine**
-  - Upgrade `youtube-shorts-research` skill from draft → beta (test on 3 scripts)
-  - Create `retention-optimization` skill
-  - Create `niche-discovery` skill
-  - Build `knowledge/youtube/` research documents
-
-- [ ] **M3 — Anti-Slop Engine**
-  - Implement `agent/qa2.py` with 6-stage pipeline
-  - Backfill Stage A evaluation for 10 existing scripts
-
-- [ ] **M5 — Provider Infrastructure**
-  - Implement `agent/router.py`
-  - Run Free LLM Tournament (Experiment 01)
+- [ ] **Provider Credential Onboarding (User Action):**
+  - User adds provider keys to GitHub Environment Secrets (`Settings → Environments → production → Environment secrets`) or local `.env` / `C:\Secrets\shorts-agent.env`.
+- [ ] **Handshake Verification Run:**
+  - Execute `python scripts/verify_provider_handshake.py` locally or trigger GitHub Actions workflow `.github/workflows/provider_handshake.yml`.
+- [ ] **Model Router Registration:**
+  - Populate verified providers into `agents/agent-4-providers/registry/providers.json` and enable dynamic routing in `agent/modules/tester_router.py`.
+- [ ] **Phase 4 YouTube Upload Test:**
+  - Test `publish.upload_short()` for `video_1_final.mp4` in unlisted mode upon user approval.
 
 ---
 
 ## 3. What the User Must Do
 
-1. **Approve or modify the Teamwork prompt** — reply "Approved" or give feedback
-2. **Authorize Phase 4** — confirm test upload to YouTube (private/unlisted mode)
-3. Check Telegram for the rendered Short #1 video preview
+1. **Add credentials for active providers** into GitHub Repository (`Settings` → `Environments` → `production` → `Environment secrets`) or local `.env`:
+   - `OPENROUTER_API_KEY`
+   - `DEEPINFRA_API_KEY`
+   - `FAL_KEY`
+   - `OMNIROUTE_API_KEY`
+   - `AGENTROUTER_API_KEY`
+   - `AGNES_API_KEY`
+   - `ANYAPI_API_KEY`
+   - `OPENCODE_API_KEY`
+   - `VERTEX_API_KEY` (or Google Cloud Workload Identity Federation / Service Account)
+   *(Pollinations AI requires no key and is already working!)*
+2. **Reply when ready** to run the handshake verification.
 
 ---
 
-## 4. R2 Storage
+## 4. R2 & Drive Storage
 
-- Last saved: `SAVED: shorts-agent at 20261110-160224` (36 MB / 8192 MB)
-- Status: ✅ Well within limits
-- Next save required after current commit
+- Last saved: `SAVED: shorts-agent at 20261111-092410` (42 MB / 8192 MB)
+- Status: ✅ Well within limits (42 MB / 8 GB limit)
