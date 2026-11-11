@@ -104,5 +104,17 @@ def _migrate(conn: sqlite3.Connection) -> None:
         started_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
         finished_at DATETIME
     );
+
+    CREATE TABLE IF NOT EXISTS audit_logs (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_type      TEXT    NOT NULL,  -- AUTH_HANDSHAKE | TOKEN_ISSUED | MODEL_ROUTED | ANOMALY_DETECTED | ACCESS_REVOKED
+        actor_email     TEXT    NOT NULL,  -- e.g. pankajbhati140@gmail.com
+        provider        TEXT,
+        model           TEXT,
+        status          TEXT    NOT NULL,  -- SUCCESS | FAILED | BLOCKED | SUSPICIOUS
+        ip_or_source    TEXT,              -- local_runner | github_actions_ci
+        details         TEXT,              -- JSON metadata (never raw secrets)
+        created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
     """)
     conn.commit()
