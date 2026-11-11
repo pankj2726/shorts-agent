@@ -163,14 +163,20 @@ class EmbeddedOmniRoute:
         active_effort = effort or UniversalCapabilityRegistry.get_active_effort()
         model_status = UniversalCapabilityRegistry.get_model_status(active_canonical)
 
-        # Dynamic primary chain construction
+        # Dynamic primary chain construction: Same-Model First, Peer Models Second
         if provider_preference:
             chain = provider_preference
         else:
-            primary_prov = model_status.get("primary_provider", "arena")
-            # Build intelligent chain putting the model's preferred provider first, followed by resilient fallbacks
-            all_provs = ["anthropic", "openai", "arena", "openrouter", "groq", "deepinfra", "pollinations"]
-            chain = [primary_prov] + [p for p in all_provs if p != primary_prov]
+            # 1. Identify all providers that support this exact canonical model
+            canonical_spec = CANONICAL_MODELS.get(active_canonical, {})
+            model_providers = list(canonical_spec.get("provider_mappings", {}).keys())
+
+            # 2. Preferred order: Same-model routers first
+            primary_chain = [p for p in model_providers if self._is_provider_online(p)]
+
+            # 3. Resilient fallback routers
+            fallback_chain = ["arena", "openrouter", "omniroute", "opencode", "anyapi", "anthropic", "openai", "deepinfra", "groq", "pollinations"]
+            chain = primary_chain + [p for p in fallback_chain if p not in primary_chain and self._is_provider_online(p)]
 
         last_error = None
         attempt_history = []
@@ -254,6 +260,42 @@ class EmbeddedOmniRoute:
                     res["effort"] = active_effort
                     return res
 
+                elif prov == "omniroute" and os.environ.get("OMNIROUTE_API_KEY"):
+                    res = self._call_openai_compatible_router(
+                        provider_name="omniroute",
+                        endpoint_url="https://api.omniroute.ai/v1/chat/completions",
+                        api_key=os.environ["OMNIROUTE_API_KEY"],
+                        prompt=prompt, system_prompt=system_prompt, model=target_model, timeout=timeout
+                    )
+                    res["attempt_history"] = attempt_history
+                    res["canonical_model"] = active_canonical
+                    res["effort"] = active_effort
+                    return res
+
+                elif prov == "opencode" and os.environ.get("OPENCODE_API_KEY"):
+                    res = self._call_openai_compatible_router(
+                        provider_name="opencode",
+                        endpoint_url="https://api.opencode.ai/v1/chat/completions",
+                        api_key=os.environ["OPENCODE_API_KEY"],
+                        prompt=prompt, system_prompt=system_prompt, model=target_model, timeout=timeout
+                    )
+                    res["attempt_history"] = attempt_history
+                    res["canonical_model"] = active_canonical
+                    res["effort"] = active_effort
+                    return res
+
+                elif prov == "anyapi" and os.environ.get("ANYAPI_API_KEY"):
+                    res = self._call_openai_compatible_router(
+                        provider_name="anyapi",
+                        endpoint_url="https://api.anyapi.io/v1/chat/completions",
+                        api_key=os.environ["ANYAPI_API_KEY"],
+                        prompt=prompt, system_prompt=system_prompt, model=target_model, timeout=timeout
+                    )
+                    res["attempt_history"] = attempt_history
+                    res["canonical_model"] = active_canonical
+                    res["effort"] = active_effort
+                    return res
+
             except Exception as e:
                 err_msg = f"{prov} failed ({type(e).__name__}: {e})"
                 logger.warning(f"Adaptive Router: {err_msg}. Auto-switching to next provider...")
@@ -261,6 +303,65 @@ class EmbeddedOmniRoute:
                 last_error = e
 
         raise RuntimeError(f"All embedded gateway routes failed. Attempts: {attempt_history}. Last error: {last_error}")
+
+    def _is_provider_online(self, prov: str) -> bool:
+        if prov == "pollinations":
+            return True
+        key_map = {
+            "arena": ["ARENA_API_KEY"],
+            "anthropic": ["ANTHROPIC_API_KEY", "CLAUDE_CONSOLE_API_KEY", "CLAUDE_API_KEY"],
+            "openai": ["OPENAI_API_KEY", "CHATGPT_API_KEY"],
+            "openrouter": ["OPENROUTER_API_KEY"],
+            "omniroute": ["OMNIROUTE_API_KEY"],
+            "opencode": ["OPENCODE_API_KEY"],
+            "anyapi": ["ANYAPI_API_KEY"],
+            "groq": ["GROQ_API_KEY"],
+            "deepinfra": ["DEEPINFRA_API_KEY"],
+            "vertex_ai": ["VERTEX_AI_API_KEY", "GEMINI_API_KEY"],
+            "fal_ai": ["FAL_KEY", "FAL_AI_API_KEY"]
+        }
+        keys = key_map.get(prov, [])
+        return any(bool(os.environ.get(k)) for k in keys)
+
+    def _call_openai_compatible_router(
+        self,
+        provider_name: str,
+        endpoint_url: str,
+        api_key: str,
+        prompt: str,
+        system_prompt: Optional[str],
+        model: str,
+        timeout: int
+    ) -> Dict[str, Any]:
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
+        payload = {"model": model, "messages": messages}
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            endpoint_url,
+            data=data,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+                "User-Agent": "ShortsAgent-UniversalRouter/1.0",
+                "X-Workspace-Identity": "pankajbhati140@gmail.com",
+                "X-Organization-Name": "ShortsForge-Enterprise",
+            },
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            res_json = json.loads(resp.read().decode("utf-8"))
+            choice = res_json["choices"][0]["message"]["content"]
+            return {
+                "provider": provider_name,
+                "model": model,
+                "cost": 0.0,
+                "text": choice.strip(),
+                "status": "success"
+            }
 
     def _call_groq_text(
         self, prompt: str, system_prompt: Optional[str], model: str, timeout: int

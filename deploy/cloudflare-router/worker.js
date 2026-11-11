@@ -157,7 +157,11 @@ export default {
       // Route 2: OpenRouter (Direct Free Tier & Fallbacks)
       if (!result && env.OPENROUTER_API_KEY) {
         try {
-          const target = model.includes("deepseek") ? "deepseek/deepseek-r1:free" : "meta-llama/llama-3.3-70b-instruct:free";
+          let target = "meta-llama/llama-3.3-70b-instruct:free";
+          if (model.includes("claude")) target = "anthropic/claude-3.5-sonnet";
+          else if (model.includes("deepseek")) target = "deepseek/deepseek-r1:free";
+          else if (model.includes("gemini")) target = "google/gemini-2.0-flash-exp:free";
+
           const resp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
             method: "POST",
             headers: {
@@ -165,6 +169,7 @@ export default {
               Authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
               "HTTP-Referer": "https://github.com/pankj2726/shorts-agent",
               "X-Title": "Shorts Edge Router",
+              "X-Workspace-Identity": "pankajbhati140@gmail.com",
             },
             body: JSON.stringify({
               model: target,
@@ -176,6 +181,55 @@ export default {
             result = await resp.json();
             usedProvider = "openrouter";
             usedModel = target;
+          }
+        } catch (e) {}
+      }
+
+      // Route 3: OmniRoute / OpenCode / AnyAPI Gateways
+      const customGatewayKey = env.OMNIROUTE_API_KEY || env.OPENCODE_API_KEY || env.ANYAPI_API_KEY;
+      if (!result && customGatewayKey) {
+        try {
+          const gwUrl = env.OMNIROUTE_API_KEY ? "https://api.omniroute.ai/v1/chat/completions" : "https://api.opencode.ai/v1/chat/completions";
+          const resp = await fetch(gwUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${customGatewayKey}`,
+              "User-Agent": "ShortsAgent-UniversalEdge/1.0",
+              "X-Workspace-Identity": "pankajbhati140@gmail.com",
+            },
+            body: JSON.stringify({
+              model: model,
+              messages,
+            }),
+          });
+          if (resp.ok) {
+            result = await resp.json();
+            usedProvider = "agent_router";
+            usedModel = model;
+          }
+        } catch (e) {}
+      }
+
+      // Route 4: Direct OpenAI API
+      if (!result && env.OPENAI_API_KEY) {
+        try {
+          const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+              "User-Agent": "ShortsAgent-OpenAIEdge/1.0",
+            },
+            body: JSON.stringify({
+              model: model.includes("o1") ? "o1" : (model.includes("o3") ? "o3-mini" : "gpt-4o"),
+              messages,
+            }),
+          });
+          if (resp.ok) {
+            result = await resp.json();
+            usedProvider = "openai";
+            usedModel = model;
           }
         } catch (e) {}
       }
