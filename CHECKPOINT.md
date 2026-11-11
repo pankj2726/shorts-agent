@@ -1,36 +1,23 @@
 # Project Checkpoint: YouTube Shorts Agent
 
-**Updated:** 2026-11-11 11:02 IST  
-**Current Phase:** Shorts #1 to #7 Rendered & QA #2 Verified → Multi-Short Batch Production
+**Updated:** 2026-11-11 11:15 IST  
+**Current Phase:** All 10 Production Shorts (#1–#10) Rendered & QA #2 Verified → Telegram Delivery Complete
 
 ---
 
 ## 1. Done
 
-- [x] **Short #7 Video Assembly & Rendering Verified:**
-  - Script: *"Make cheap mics sound like studio quality for free"*
-  - Neural TTS: `en-IN-NeerjaNeural`, 83 word-level timestamps.
-  - Video specs: 1080×1920 (9:16 portrait), 42.0s duration, −15.0 LUFS loudness.
-  - Kinetic ASS subtitles: 83 synchronized events.
-  - QA Gate #2: PASSED ✅.
-  - Database updated: `videos` record (id=7) marked `render_qa_ok = 1`.
-  - Telegram preview video delivered successfully!
-
-- [x] **Short #6 Video Assembly & Rendering Verified:**
-  - Script: *"Gamma AI: Generate Presentation Decks in 30 Seconds"*
-  - Neural TTS: `en-IN-NeerjaNeural`, 72 word-level timestamps.
-  - Video specs: 1080×1920 (9:16 portrait), 31.9s duration, −15.2 LUFS loudness.
-  - QA Gate #2: PASSED ✅.
-  - Database updated: `videos` record (id=6) marked `render_qa_ok = 1`.
-  - Telegram preview video delivered successfully!
-
-- [x] **Shorts #1 to #5 Fully Rendered & Delivered:**
-  - Short #1: *Windows File Preview Hack* (30.6s, -14.9 LUFS)
-  - Short #2: *Windows Clipboard History* (29.4s, -14.8 LUFS)
-  - Short #3: *Pin Any Window on Top* (30.0s, -15.2 LUFS)
-  - Short #4: *Copy Text From Any Image* (30.9s, -14.9 LUFS)
-  - Short #5: *NotebookLM AI Turn PDFs Into Podcasts* (36.0s, -14.9 LUFS)
-  - All verified via QA Gate #2 and delivered to Telegram.
+- [x] **Full 10-Short Production Batch Rendered & QA #2 Verified:**
+  - **Short #1:** *Windows File Preview Hack* (1080×1920, 30.6s, −14.9 LUFS, 58 words) — ✅ QA2 Passed & Delivered to Telegram
+  - **Short #2:** *Windows Clipboard History* (1080×1920, 29.4s, −14.8 LUFS, 57 words) — ✅ QA2 Passed & Delivered to Telegram
+  - **Short #3:** *Pin Any Window on Top* (1080×1920, 30.0s, −15.2 LUFS, 54 words) — ✅ QA2 Passed & Delivered to Telegram
+  - **Short #4:** *Copy Text From Any Image* (1080×1920, 30.9s, −14.9 LUFS, 59 words) — ✅ QA2 Passed & Delivered to Telegram
+  - **Short #5:** *NotebookLM AI Turn PDFs Into Podcasts* (1080×1920, 36.0s, −14.9 LUFS, 71 words) — ✅ QA2 Passed & Delivered to Telegram
+  - **Short #6:** *Gamma AI: Presentations in 30s* (1080×1920, 31.9s, −15.2 LUFS, 72 words) — ✅ QA2 Passed & Delivered to Telegram
+  - **Short #7:** *Make cheap mics sound like studio quality for free* (1080×1920, 42.0s, −15.0 LUFS, 83 words) — ✅ QA2 Passed & Delivered to Telegram
+  - **Short #8:** *Stop Afternoon Coffee Crashes With This 10-Minute Reset* (1080×1920, 39.2s, −15.0 LUFS, 74 words) — ✅ QA2 Passed & Delivered to Telegram
+  - **Short #9:** *Stop Multitasking: The Hidden Cost Exposed* (1080×1920, 29.9s, −15.0 LUFS, 63 words) — ✅ QA2 Passed & Delivered to Telegram
+  - **Short #10:** *Focus Hack: Stop Phone Notifications* (1080×1920, 32.4s, −14.9 LUFS, 68 words) — ✅ QA2 Passed & Delivered to Telegram
 
 - [x] **Enterprise Audit Engine Deployed (`agent/modules/audit.py`):**
   - Immutable SQLite audit ledger with actor attribution and anomaly detection.
@@ -54,23 +41,23 @@
 
 ## 2. Next
 
-- [ ] **Google Workspace OIDC Integration:**
+- [ ] **Phase 4 YouTube Upload Test:**
+  - Test `publish.upload_short()` for `video_1_final.mp4` in unlisted mode upon explicit user approval.
+- [ ] **Google Workspace OIDC & SSO Integration:**
   - Connect Google Workspace OAuth for centralized workforce single-sign-on (SSO).
 - [ ] **Handshake Verification in GitHub Actions:**
   - Verify remaining providers in `production` environment via `.github/workflows/provider_handshake.yml`.
-- [ ] **Phase 4 YouTube Upload Test:**
-  - Test `publish.upload_short()` for `video_1_final.mp4` in unlisted mode upon user approval.
 
 ---
 
 ## 3. What the User Must Do
 
-1. Review the Google Workspace OAuth & Audit Logging architecture below.
-2. Reply with the next task or directive.
+1. Review rendered preview videos delivered to Telegram.
+2. Grant authorization when ready for YouTube unlisted upload test.
 
 ---
 
 ## 4. R2 & Drive Storage
 
-- Last saved: `SAVED: shorts-agent at 20261111-103511` (42 MB / 8192 MB)
-- Status: ✅ Well within limits (42 MB / 8 GB limit)
+- Last saved: `SAVED: shorts-agent at 20261111-110354` (68 MB / 8192 MB)
+- Status: ✅ Well within limits (68 MB / 8 GB limit)
