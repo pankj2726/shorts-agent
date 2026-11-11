@@ -1,11 +1,37 @@
 # Project Checkpoint: YouTube Shorts Agent (Shorts Forge)
 
-**Updated:** 2026-11-11 16:10 IST  
-**Current Phase:** Model Freedom Initiative V3 Complete — Organization Auth Active & Setup Guide Delivered
+**Updated:** 2026-11-11 17:20 IST  
+**Current Phase:** Milestone 2 Complete — Unified Cross-Model Conversation Store & Context Bridge Operational
 
 ---
 
 ## 1. Done
+
+- [x] **Milestone 2: Unified Cross-Model Conversation Store & Context Bridge:**
+  - **SQLite Conversation Schema & Connection Layer (`agent/modules/db.py`):**
+    - High-performance pragmas: `PRAGMA foreign_keys = ON;`, `PRAGMA busy_timeout = 10000;`, `PRAGMA journal_mode = WAL;`, `PRAGMA synchronous = NORMAL;`.
+    - Relational schema: `conversations` (UUID primary key, title, default provider/model, metadata JSON, timestamps) and `messages` (monotonic integer autoincrement ID, conversation_id foreign key with ON DELETE CASCADE, role CHECK constraint, content, provider, model, thinking_content, metadata JSON).
+    - Composite indexes: `idx_messages_conversation_id_id`, `idx_messages_conversation_id_created`, `idx_conversations_updated_at`.
+    - Auto-update triggers: `trg_messages_update_conversation_insert`, `trg_messages_update_conversation_update` maintaining `conversations.updated_at`.
+    - Context manager `get_db(db_path, timeout)` with automatic transaction handling.
+    - Conversation & message CRUD operations: `create_conversation`, `get_conversation`, `update_conversation`, `delete_conversation`, `list_conversations`, `create_message`, `get_messages_by_conversation`, `get_message`, `delete_message`, `count_messages`.
+    - 100% backward compatible with existing `get_conn()`.
+  - **Unified Cross-Model Conversation Store & Context Bridge (`agent/modules/conversation_store.py`):**
+    - Lossless Canonical representation (`CanonicalRole`, `CanonicalContentBlock`, `CanonicalMessage`, `CanonicalConversation`).
+    - Thinking scratchpad isolation: DeepSeek `<think>` tag extraction, Claude 3.7 extended thinking blocks & cryptographic signature validation, stripping thinking from OpenAI/Groq wire prompts to prevent HTTP 400 errors.
+    - Format normalizers:
+      - Anthropic: extracts system/developer to top-level `system` parameter, adapts mid-stream system updates to user notes, coalesces consecutive same-role messages with `\n\n`, guarantees starting user turn, sanitizes empty content.
+      - OpenAI: maps `developer` vs `system` conditionally (reasoning models `o1`/`o3` get `developer`; Groq, Cerebras, DeepInfra, OpenRouter get `system` to eliminate 400 bad request errors).
+      - Arena.AI: supports OpenAI chat completions format and paired-round transcripts.
+    - High-level bridge APIs: `save_conversation`, `save_message`, `get_conversation`, `get_conversation_messages`, `list_conversations`, `export_conversation_for_provider`, `delete_conversation`, `translate_messages`.
+  - **Gateway Server Unification (`agent/modules/gateway_server.py`):**
+    - Deprecated fragmented `unified_conversations.db` in favor of centralized SQLite store via `conversation_store.py` and `db.py`.
+    - Preserved backwards compatibility for `save_message(session_id, ...)` and `get_conversation_history(session_id, ...)`.
+    - Eliminated multi-turn conversational amnesia: inbound dialogue history is synchronized into the store and full conversation context is exported to the model router.
+    - Extended `/v1/conversations` and `/v1/conversations/<id>` endpoints.
+  - **Comprehensive Test Suite (`tests/test_conversation_store.py`):**
+    - 46 unit test cases passing 100% across all 6 test classes (`TestConversationStoreCRUD`, `TestAnthropicTurnNormalization`, `TestSystemDeveloperRoleMapping`, `TestThinkingContentHandling`, `TestCrossModelContinuationSimulation`, `TestEdgeCasesAndSecurity`).
+    - All existing gateway, omniroute, failover, and model freedom tests passing 100% (60/60 passing in combined regression run).
 
 - [x] **Paid Model Handshake Authorization & Routing Suite:**
   - **Enterprise Configuration (`agent/config/paid_router_config.json`):**

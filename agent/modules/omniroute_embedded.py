@@ -23,7 +23,8 @@ import urllib.request
 import urllib.error
 from typing import Any, Dict, List, Optional
 from pathlib import Path
-from agent.modules.capability_registry import UniversalCapabilityRegistry
+from agent.modules.capability_registry import UniversalCapabilityRegistry, CANONICAL_MODELS
+from agent.modules.arena_cluster import ArenaClusterClient
 
 # Safe environment loader
 def _load_env_safe() -> None:
@@ -143,6 +144,28 @@ class EmbeddedOmniRoute:
             }
         })
 
+        # 7. Anthropic Direct Adapter
+        anthropic_key = (
+            os.environ.get("ANTHROPIC_API_KEY")
+            or os.environ.get("CLAUDE_CONSOLE_API_KEY")
+            or os.environ.get("CLAUDE_API_KEY")
+        )
+        routes.append({
+            "provider": "anthropic",
+            "tier": "frontier_direct",
+            "online": bool(anthropic_key),
+            "requires_key": True,
+        })
+
+        # 8. OpenAI Direct Adapter
+        openai_key = os.environ.get("OPENAI_API_KEY") or os.environ.get("CHATGPT_API_KEY")
+        routes.append({
+            "provider": "openai",
+            "tier": "frontier_direct",
+            "online": bool(openai_key),
+            "requires_key": True,
+        })
+
         return routes
 
     def complete_text(
@@ -159,11 +182,13 @@ class EmbeddedOmniRoute:
         Guarantees that an operation never stalls midway.
         """
         # Resolve active canonical model and effort from UniversalCapabilityRegistry if not explicitly provided
-        active_canonical = model or UniversalCapabilityRegistry.get_active_model()
+        canonical_candidate = model or UniversalCapabilityRegistry.get_active_model()
+        resolved = UniversalCapabilityRegistry.resolve_canonical_id(canonical_candidate)
+        active_canonical = resolved if resolved else (canonical_candidate if canonical_candidate in CANONICAL_MODELS else UniversalCapabilityRegistry.get_active_model())
         active_effort = effort or UniversalCapabilityRegistry.get_active_effort()
         model_status = UniversalCapabilityRegistry.get_model_status(active_canonical)
 
-        # Dynamic primary chain construction: Same-Model First, Peer Models Second
+        # Dynamic primary chain construction: Same-Model First, Peer Models Second (IMRCM)
         if provider_preference:
             chain = provider_preference
         else:
@@ -172,11 +197,11 @@ class EmbeddedOmniRoute:
             model_providers = list(canonical_spec.get("provider_mappings", {}).keys())
 
             # 2. Preferred order: Same-model routers first
-            primary_chain = [p for p in model_providers if self._is_provider_online(p)]
+            same_model_chain = [p for p in model_providers if self._is_provider_online(p)]
 
-            # 3. Resilient fallback routers
-            fallback_chain = ["arena", "openrouter", "omniroute", "opencode", "anyapi", "anthropic", "openai", "deepinfra", "groq", "pollinations"]
-            chain = primary_chain + [p for p in fallback_chain if p not in primary_chain and self._is_provider_online(p)]
+            # 3. Resilient fallback routers (Infinite Multi-Router Cascade Matrix)
+            fallback_chain = ["arena", "groq", "anthropic", "openai", "openrouter", "deepinfra", "omniroute", "opencode", "anyapi", "agnes", "agentrouter", "pollinations"]
+            chain = same_model_chain + [p for p in fallback_chain if p not in same_model_chain and self._is_provider_online(p)]
 
         last_error = None
         attempt_history = []
@@ -246,8 +271,8 @@ class EmbeddedOmniRoute:
                     res["effort"] = active_effort
                     return res
 
-                elif prov == "arena" and os.environ.get("ARENA_API_KEY"):
-                    res = self._call_arena_text(prompt, system_prompt, target_model, timeout)
+                elif prov == "arena" and (os.environ.get("ARENA_API_KEY") or os.environ.get("ARENA_KEY")):
+                    res = self._call_arena_text(prompt, system_prompt, target_model, timeout, effort=active_effort)
                     res["attempt_history"] = attempt_history
                     res["canonical_model"] = active_canonical
                     res["effort"] = active_effort
@@ -296,11 +321,28 @@ class EmbeddedOmniRoute:
                     res["effort"] = active_effort
                     return res
 
+                elif prov in ("agnes", "agentrouter") and (os.environ.get(f"{prov.upper()}_API_KEY")):
+                    res = self._call_openai_compatible_router(
+                        provider_name=prov,
+                        endpoint_url=f"https://api.{prov}.ai/v1/chat/completions",
+                        api_key=os.environ[f"{prov.upper()}_API_KEY"],
+                        prompt=prompt, system_prompt=system_prompt, model=target_model, timeout=timeout
+                    )
+                    res["attempt_history"] = attempt_history
+                    res["canonical_model"] = active_canonical
+                    res["effort"] = active_effort
+                    return res
+
             except Exception as e:
                 err_msg = f"{prov} failed ({type(e).__name__}: {e})"
                 logger.warning(f"Adaptive Router: {err_msg}. Auto-switching to next provider...")
                 attempt_history.append({"provider": prov, "error": str(e), "timestamp": time.time()})
                 last_error = e
+                try:
+                    from agent.modules.federation_registry import FederationRegistry
+                    FederationRegistry.mark_route_failure(active_canonical, prov, str(e))
+                except Exception:
+                    pass
 
         raise RuntimeError(f"All embedded gateway routes failed. Attempts: {attempt_history}. Last error: {last_error}")
 
@@ -308,16 +350,18 @@ class EmbeddedOmniRoute:
         if prov == "pollinations":
             return True
         key_map = {
-            "arena": ["ARENA_API_KEY"],
+            "arena": ["ARENA_API_KEY", "ARENA_KEY"],
             "anthropic": ["ANTHROPIC_API_KEY", "CLAUDE_CONSOLE_API_KEY", "CLAUDE_API_KEY"],
             "openai": ["OPENAI_API_KEY", "CHATGPT_API_KEY"],
             "openrouter": ["OPENROUTER_API_KEY"],
             "omniroute": ["OMNIROUTE_API_KEY"],
             "opencode": ["OPENCODE_API_KEY"],
             "anyapi": ["ANYAPI_API_KEY"],
+            "agnes": ["AGNES_API_KEY"],
+            "agentrouter": ["AGENTROUTER_API_KEY"],
             "groq": ["GROQ_API_KEY"],
             "deepinfra": ["DEEPINFRA_API_KEY"],
-            "vertex_ai": ["VERTEX_AI_API_KEY", "GEMINI_API_KEY"],
+            "vertex_ai": ["VERTEX_API_KEY", "GEMINI_API_KEY"],
             "fal_ai": ["FAL_KEY", "FAL_AI_API_KEY"]
         }
         keys = key_map.get(prov, [])
@@ -376,7 +420,11 @@ class EmbeddedOmniRoute:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
 
-        target_model = "llama-3.3-70b-versatile" if "gpt" in model or "nano" in model else model
+        # Preserve specified model slug without clobbering; fallback to active Groq flagship if empty/generic
+        if not model or model in ("gpt-5.4-nano", "default"):
+            target_model = "openai/gpt-oss-120b"
+        else:
+            target_model = model
         payload = {
             "model": target_model,
             "messages": messages,
@@ -404,48 +452,15 @@ class EmbeddedOmniRoute:
             }
 
     def _call_arena_text(
-        self, prompt: str, system_prompt: Optional[str], model: str, timeout: int
+        self, prompt: str, system_prompt: Optional[str], model: str, timeout: int, effort: Optional[str] = None
     ) -> Dict[str, Any]:
-        key = os.environ.get("ARENA_API_KEY")
-        if not key:
-            raise ValueError("ARENA_API_KEY missing")
-
-        url = "https://api.arena.ai/v1/chat/completions"
-        messages = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
-
-        # Default to Arena coding router if generic model passed
-        target_model = "coding-router-preview" if "gpt" in model or "nano" in model else model
-        payload: Dict[str, Any] = {
-            "model": target_model,
-            "messages": messages,
-            "reasoning_effort": "high",
-        }
-        data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(
-            url,
-            data=data,
-            headers={
-                "Authorization": f"Bearer {key}",
-                "Content-Type": "application/json",
-                "User-Agent": "ShortsAgent-ArenaRouter/1.0",
-                "X-Workspace-Identity": "pankajbhati140@gmail.com",
-                "X-Organization-Name": "ShortsForge-Enterprise",
-            },
-            method="POST"
+        return ArenaClusterClient.get_instance().complete(
+            prompt=prompt,
+            system=system_prompt,
+            model=model,
+            effort=effort,
+            timeout=timeout,
         )
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            res_json = json.loads(resp.read().decode("utf-8"))
-            choice = res_json["choices"][0]["message"]["content"]
-            return {
-                "provider": "arena",
-                "model": target_model,
-                "cost": 0.0,
-                "text": choice.strip(),
-                "status": "success"
-            }
 
     def _call_deepinfra_text(
         self, prompt: str, system_prompt: Optional[str], model: str, timeout: int
@@ -536,7 +551,8 @@ class EmbeddedOmniRoute:
         messages.append({"role": "user", "content": prompt})
 
         # Ensure we use free model suffix if model not explicitly specified
-        target_model = model if ":" in model else f"{model}:free"
+        # Use specified model without destructive suffixing; fallback to default free model if empty
+        target_model = model or "deepseek/deepseek-r1:free"
         payload = {
             "model": target_model,
             "messages": messages,

@@ -45,6 +45,8 @@ class AnthropicAdapter:
 
     BASE_URL = "https://api.anthropic.com/v1"
     API_VERSION = "2023-06-01"
+    DEFAULT_WORKSPACE_ID = "wrkspc_01Ne4eA89fWrsVS4Y9LzS9Cm"
+    _cached_workspace_id: Optional[str] = None
 
     @classmethod
     def get_api_key(cls) -> Optional[str]:
@@ -54,6 +56,46 @@ class AnthropicAdapter:
             or os.environ.get("CLAUDE_API_KEY")
             or os.environ.get("ANTHROPIC_OAT_TOKEN")
         )
+
+    @classmethod
+    def get_workspace_id(cls, timeout: int = 5) -> Optional[str]:
+        """Resolves workspace ID from environment, auto-discovery, or default fallback."""
+        # 1. Environment variable override
+        ws = os.environ.get("ANTHROPIC_WORKSPACE_ID") or os.environ.get("CLAUDE_WORKSPACE_ID")
+        if ws:
+            return ws.strip()
+
+        # 2. Return cached workspace ID if already resolved
+        if cls._cached_workspace_id:
+            return cls._cached_workspace_id
+
+        # 3. Dynamic discovery probe against organization workspaces
+        key = cls.get_api_key()
+        if key:
+            try:
+                url = f"{cls.BASE_URL}/organizations/workspaces"
+                headers = {
+                    "x-api-key": key.strip(),
+                    "anthropic-version": cls.API_VERSION,
+                    "User-Agent": "ShortsForge-AnthropicAdapter/1.0",
+                }
+                req = urllib.request.Request(url, headers=headers, method="GET")
+                with urllib.request.urlopen(req, timeout=timeout) as resp:
+                    if resp.status == 200:
+                        data = json.loads(resp.read().decode("utf-8"))
+                        workspaces = data.get("data", [])
+                        if workspaces and "id" in workspaces[0]:
+                            discovered_id = workspaces[0]["id"]
+                            cls._cached_workspace_id = discovered_id
+                            os.environ["ANTHROPIC_WORKSPACE_ID"] = discovered_id
+                            return discovered_id
+            except Exception as e:
+                logger.debug(f"Workspace auto-discovery skipped: {e}")
+
+        # 4. Safe fallback to verified organization workspace
+        cls._cached_workspace_id = cls.DEFAULT_WORKSPACE_ID
+        os.environ["ANTHROPIC_WORKSPACE_ID"] = cls.DEFAULT_WORKSPACE_ID
+        return cls.DEFAULT_WORKSPACE_ID
 
     @classmethod
     def get_headers(cls) -> Dict[str, str]:
@@ -71,7 +113,7 @@ class AnthropicAdapter:
         if org_id:
             headers["anthropic-organization-id"] = org_id.strip()
 
-        ws_id = os.environ.get("ANTHROPIC_WORKSPACE_ID") or os.environ.get("CLAUDE_WORKSPACE_ID")
+        ws_id = cls.get_workspace_id()
         if ws_id:
             headers["anthropic-workspace-id"] = ws_id.strip()
 
@@ -97,6 +139,7 @@ class AnthropicAdapter:
                 for m in data.get("data", []):
                     mid = m.get("id", "")
                     records.append({
+                        "id": mid,
                         "canonical_id": mid,
                         "display_name": m.get("display_name", mid),
                         "provider": "anthropic",
@@ -114,12 +157,14 @@ class AnthropicAdapter:
             # Return baseline models if discovery probe is unconfigured or rate-limited
             return [
                 {
+                    "id": "claude-3-5-sonnet-20241022",
                     "canonical_id": "claude-3-5-sonnet-20241022",
                     "display_name": "Claude 3.5 Sonnet (Latest)",
                     "provider": "anthropic",
                     "capabilities": {"extended_thinking": True, "vision": True, "tool_calling": True}
                 },
                 {
+                    "id": "claude-3-5-haiku-20241022",
                     "canonical_id": "claude-3-5-haiku-20241022",
                     "display_name": "Claude 3.5 Haiku",
                     "provider": "anthropic",
@@ -190,12 +235,16 @@ class AnthropicAdapter:
                     elif block.get("type") == "thinking":
                         thinking_content += block.get("thinking", "")
 
+                # Extract rate-limit telemetry headers
+                rate_limits = {k.lower(): v for k, v in resp.headers.items() if "ratelimit" in k.lower()}
+
                 return {
                     "provider": "anthropic",
                     "model": model,
                     "text": text_content.strip(),
                     "thinking": thinking_content.strip(),
                     "usage": res_json.get("usage", {}),
+                    "rate_limits": rate_limits,
                     "status": "success"
                 }
         except urllib.error.HTTPError as e:
