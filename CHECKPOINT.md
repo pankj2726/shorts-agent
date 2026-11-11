@@ -47,14 +47,19 @@
   - Fuses multi-modal inputs into unified production briefs (`fuse_inputs`).
   - Unit tests verified: `tests/test_ingest.py` (4/4 passing).
 
+- [x] **End-to-End Orchestrated Pipeline Verified (`orchestration.py`):**
+  - Executed coordinated multi-agent workflow (Task `PIPE-d743722b` with QA Verdict `PASS`).
+  - Inter-agent message bus logged in `logs/agent-comms.jsonl`.
+  - Upgraded execution environments to Python 3.12 across all CI workflows.
+
 ---
 
 ## 2. Next
 
 - [ ] **Phase 4 YouTube Upload Test:**
   - Test `publish.upload_short()` for `video_1_final.mp4` in unlisted mode upon explicit user approval.
-- [ ] **End-to-End Orchestrated Pipeline Run:**
-  - Execute full cycle from Trend Radar -> Ingestion -> Storyboard -> Render -> QA2 -> Notification.
+- [ ] **Provider Keys Onboarding (Directive 6.1):**
+  - Ingest `OPENROUTER_API_KEY` into GitHub Environment Secrets (`production`).
 
 ---
 
