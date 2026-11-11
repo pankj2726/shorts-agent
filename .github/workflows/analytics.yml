@@ -20,6 +20,7 @@ env:
 jobs:
   analytics:
     runs-on: ubuntu-latest
+    environment: production
     timeout-minutes: 20
 
     steps:
