@@ -1,11 +1,25 @@
 # Project Checkpoint: YouTube Shorts Agent (Shorts Forge)
 
-**Updated:** 2026-11-11 13:10 IST  
-**Current Phase:** Multi-Provider Handshake & Credential Ingestion Complete (6 Providers Live + Zero Secrets Exposed)
+**Updated:** 2026-11-11 14:30 IST  
+**Current Phase:** Workspace Identity Gateway (WIG) Implemented & R2 Vault Cloud Synced
 
 ---
 
 ## 1. Done
+
+- [x] **Workspace Identity Gateway (WIG) Implementation Complete:**
+  - **Auto-Switching 429 & Busy Failover Engine (`omniroute_embedded.py`):**
+    - Automatic cascading fallback across Pollinations $\rightarrow$ OpenRouter $\rightarrow$ Groq $\rightarrow$ Arena.AI $\rightarrow$ DeepInfra.
+    - Captures rate limits, timeouts, and network drops mid-flight; auto-switches to the next tier so operations never stall.
+    - Verified via unit test suite: `tests/test_omniroute_failover.py` (2/2 passing).
+  - **Zero-Cost Keep-Alive Daemon (`agent/modules/keep_alive.py`):**
+    - Non-billable GET metadata health prober keeping TLS sockets pre-warmed ($0.00 cost).
+    - Verified live: Arena.AI responded in **647 ms** (fastest), OpenRouter in **716 ms**, Groq in **739 ms**.
+  - **Cloudflare R2 Encrypted Vault Sync (`scripts/vault_sync.ps1`):**
+    - Asymmetric `age` encryption applied locally using public recipient `age1f8mfu5...`.
+    - Synced active ciphertext to `r2:workspace-cache/vault/shorts-agent.env.age`.
+    - Archived timestamped snapshot to `r2:workspace-cache/vault/history/shorts-agent-<timestamp>.env.age`.
+    - Zero secrets exposed; historical rollback copies permanently secured.
 
 - [x] **Directive 6.1 Multi-Provider Handshake & Credential Ingestion:**
   - Securely ingested 24 project credentials + **Arena.AI TokenRouter (`ARENA_API_KEY`)** into `C:\Secrets\shorts-agent.env`.

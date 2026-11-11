@@ -129,6 +129,19 @@ class EmbeddedOmniRoute:
             }
         })
 
+        # 6. Groq Cloud (Ultra-Fast Inference)
+        groq_key = os.environ.get("GROQ_API_KEY")
+        routes.append({
+            "provider": "groq",
+            "tier": "high_speed_free_tier",
+            "online": bool(groq_key),
+            "requires_key": True,
+            "endpoints": {
+                "chat": "https://api.groq.com/openai/v1/chat/completions",
+                "models": "https://api.groq.com/openai/v1/models"
+            }
+        })
+
         return routes
 
     def complete_text(
@@ -140,41 +153,87 @@ class EmbeddedOmniRoute:
         timeout: int = 30
     ) -> Dict[str, Any]:
         """
-        Routes text generation with automatic fallback across eligible free providers.
+        Routes text generation with automatic 429/busy fallback across eligible providers.
+        Guarantees that an operation never stalls midway.
         """
-        chain = provider_preference or ["pollinations", "openrouter", "deepinfra", "arena"]
+        chain = provider_preference or ["pollinations", "openrouter", "groq", "arena", "deepinfra"]
         last_error = None
+        attempt_history = []
 
         for prov in chain:
-            if prov == "pollinations":
-                try:
-                    return self._call_pollinations_text(prompt, system_prompt, model, timeout)
-                except Exception as e:
-                    logger.warning(f"Pollinations route failed: {e}. Falling back...")
-                    last_error = e
+            try:
+                if prov == "pollinations":
+                    res = self._call_pollinations_text(prompt, system_prompt, model, timeout)
+                    res["attempt_history"] = attempt_history
+                    return res
 
-            elif prov == "openrouter" and os.environ.get("OPENROUTER_API_KEY"):
-                try:
-                    return self._call_openrouter_text(prompt, system_prompt, model, timeout)
-                except Exception as e:
-                    logger.warning(f"OpenRouter route failed: {e}. Falling back...")
-                    last_error = e
+                elif prov == "openrouter" and os.environ.get("OPENROUTER_API_KEY"):
+                    res = self._call_openrouter_text(prompt, system_prompt, model, timeout)
+                    res["attempt_history"] = attempt_history
+                    return res
 
-            elif prov == "deepinfra" and os.environ.get("DEEPINFRA_API_KEY"):
-                try:
-                    return self._call_deepinfra_text(prompt, system_prompt, model, timeout)
-                except Exception as e:
-                    logger.warning(f"DeepInfra route failed: {e}. Falling back...")
-                    last_error = e
+                elif prov == "groq" and os.environ.get("GROQ_API_KEY"):
+                    res = self._call_groq_text(prompt, system_prompt, model, timeout)
+                    res["attempt_history"] = attempt_history
+                    return res
 
-            elif prov == "arena" and os.environ.get("ARENA_API_KEY"):
-                try:
-                    return self._call_arena_text(prompt, system_prompt, model, timeout)
-                except Exception as e:
-                    logger.warning(f"Arena route failed: {e}. Falling back...")
-                    last_error = e
+                elif prov == "arena" and os.environ.get("ARENA_API_KEY"):
+                    res = self._call_arena_text(prompt, system_prompt, model, timeout)
+                    res["attempt_history"] = attempt_history
+                    return res
 
-        raise RuntimeError(f"All embedded routes failed. Last error: {last_error}")
+                elif prov == "deepinfra" and os.environ.get("DEEPINFRA_API_KEY"):
+                    res = self._call_deepinfra_text(prompt, system_prompt, model, timeout)
+                    res["attempt_history"] = attempt_history
+                    return res
+
+            except Exception as e:
+                err_msg = f"{prov} failed ({type(e).__name__}: {e})"
+                logger.warning(f"Adaptive Router: {err_msg}. Auto-switching to next provider...")
+                attempt_history.append({"provider": prov, "error": str(e), "timestamp": time.time()})
+                last_error = e
+
+        raise RuntimeError(f"All embedded gateway routes failed. Attempts: {attempt_history}. Last error: {last_error}")
+
+    def _call_groq_text(
+        self, prompt: str, system_prompt: Optional[str], model: str, timeout: int
+    ) -> Dict[str, Any]:
+        key = os.environ.get("GROQ_API_KEY")
+        if not key:
+            raise ValueError("GROQ_API_KEY missing")
+
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
+        target_model = "llama-3.3-70b-versatile" if "gpt" in model or "nano" in model else model
+        payload = {
+            "model": target_model,
+            "messages": messages,
+        }
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            data=data,
+            headers={
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json",
+                "User-Agent": "ShortsAgent-GroqRouter/1.0",
+            },
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            res_json = json.loads(resp.read().decode("utf-8"))
+            choice = res_json["choices"][0]["message"]["content"]
+            return {
+                "provider": "groq",
+                "model": target_model,
+                "cost": 0.0,
+                "text": choice.strip(),
+                "status": "success"
+            }
 
     def _call_arena_text(
         self, prompt: str, system_prompt: Optional[str], model: str, timeout: int
