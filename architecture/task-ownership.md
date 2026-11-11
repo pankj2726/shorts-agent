@@ -3,7 +3,7 @@
 # Task Ownership Registry
 
 **Purpose:** Prevent duplicate investigations. Record which agent owns each active task.  
-**Updated:** 2026-11-10
+**Last Programmatic Sync:** 2026-11-10 12:48:34 UTC
 
 ---
 
@@ -13,7 +13,7 @@
 |---------|-----------|-------|--------|---------------|
 | T001 | Provider Registry — initial build | A4 | ✅ Done | `agents/agent-4-providers/registry/providers.json` |
 | T002 | Agent infrastructure — directory structure | Orchestrator | ✅ Done | `agents/` |
-| T003 | Phase 4 YouTube upload test | A1+Orchestrator | ⏳ Waiting (user auth) | — |
+| T003 | Phase 4 YouTube upload test | A1+Orchestrator | ⛔ Blocked | — |
 | T004 | Free LLM Tournament experiment | A5→A4 | ⏳ Queued | `agents/agent-5-innovation/experiments/llm-tournament/` |
 | T005 | ACE-Step 1.5 local test | A4 | ⏳ Queued | `agents/agent-4-providers/reports/ace-step-test.md` |
 | T006 | WhisperX local test | A4 | ⏳ Queued | `agents/agent-4-providers/reports/whisperx-test.md` |

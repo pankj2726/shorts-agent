@@ -383,21 +383,53 @@ def run_smoke() -> None:
         _notify("PIPELINE_ONLINE", msg, level="success")
 
 
+def run_orchestrated_pipeline() -> None:
+    """Runs coordinated multi-agent pipeline via Central Orchestrator."""
+    from agent.modules.orchestration import get_orchestrator
+    logger.info("=== Starting Coordinated Multi-Agent Pipeline ===")
+    orch = get_orchestrator()
+    result = orch.run_production_pipeline()
+    logger.info("Coordinated pipeline result: Task=%s Verdict=%s", result.get("task_id"), result.get("qa_verdict"))
+    print(f"Pipeline completed: {result.get('task_id')} (QA: {result.get('qa_verdict')})")
+
+
+def show_comms_log() -> None:
+    """Displays recent inter-agent communication records from logs/agent-comms.jsonl."""
+    from agent.modules.orchestration import MessageLogger
+    limit = 10
+    if len(sys.argv) > 2:
+        try:
+            limit = int(sys.argv[2])
+        except ValueError:
+            if sys.argv[2] == "--limit" and len(sys.argv) > 3:
+                limit = int(sys.argv[3])
+    logger_instance = MessageLogger()
+    messages = logger_instance.read_messages(limit=limit)
+    print(f"=== Agent Communications Log (Last {len(messages)} messages) ===")
+    if not messages:
+        print("No communication records found in logs/agent-comms.jsonl.")
+        return
+    for msg in messages:
+        print(f"[{msg.timestamp}] {msg.sender} -> {msg.recipient} | Action: {msg.action} | Task: {msg.task_id} | Conf: {msg.confidence}")
+
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python -m agent.main [pipeline|engage|analytics|commands|smoke]")
+        print("Usage: python -m agent.main [pipeline|orchestrate|engage|analytics|commands|smoke|comms]")
         sys.exit(1)
 
     cmd = sys.argv[1]
     dispatch = {
         "pipeline": run_pipeline,
+        "orchestrate": run_orchestrated_pipeline,
         "engage": run_engage,
         "analytics": run_analytics,
         "commands": run_commands,
         "smoke": run_smoke,
+        "comms": show_comms_log,
     }
     fn = dispatch.get(cmd)
     if not fn:
         print(f"Unknown command: {cmd}")
         sys.exit(1)
-    fn()
+    fn()
