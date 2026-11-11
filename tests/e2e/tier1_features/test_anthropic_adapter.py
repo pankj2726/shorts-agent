@@ -71,6 +71,7 @@ def test_anthropic_thinking_budget_enforcement(monkeypatch):
         nonlocal captured_payload
         captured_payload = json.loads(req.data.decode("utf-8"))
         mock_resp = MagicMock()
+        mock_resp.__enter__.return_value = mock_resp
         mock_resp.headers = {
             "anthropic-ratelimit-requests-limit": "1000",
             "anthropic-ratelimit-tokens-limit": "100000"

@@ -15,6 +15,13 @@ import requests
 from typing import Any, Dict, List
 
 from tests.e2e.conftest import MockGatewayServer, E2ETestDB
+import tests.e2e.conftest as conftest_module
+
+
+@pytest.fixture(autouse=True)
+def force_ephemeral_port(monkeypatch: pytest.MonkeyPatch):
+    """Ensure each mock gateway server binds to a unique ephemeral port to avoid Windows SO_REUSEADDR port collision."""
+    monkeypatch.setattr(conftest_module, "_find_available_port", lambda preferred=0: 0)
 
 
 class TestCrossArenaToChatGPT:
@@ -44,12 +51,15 @@ class TestCrossArenaToChatGPT:
         res1 = e2e_client.post(
             f"{mock_gateway_server.url}/v1/messages",
             json=arena_payload,
-            headers={"Content-Type": "application/json"}
+            headers={"Content-Type": "application/json", "Connection": "close"}
         )
         assert res1.status_code == 200, f"Arena request failed: {res1.text}"
         res1_data = res1.json()
         assert res1_data["role"] == "assistant"
         assert res1_data["model"] == "claude-coding-router-preview"
+
+        import time
+        time.sleep(0.05)
 
         # Verify DB has stored the initial exchange
         messages_turn1 = e2e_db.get_conversation_messages(conv_id, format="raw")
@@ -71,12 +81,14 @@ class TestCrossArenaToChatGPT:
         res2 = e2e_client.post(
             f"{mock_gateway_server.url}/v1/chat/completions",
             json=chatgpt_payload,
-            headers={"Content-Type": "application/json"}
+            headers={"Content-Type": "application/json", "Connection": "close"}
         )
         assert res2.status_code == 200, f"ChatGPT continuation failed: {res2.text}"
         res2_data = res2.json()
         assert res2_data["choices"][0]["message"]["role"] == "assistant"
         assert res2_data["model"] == "gpt-4o"
+
+        time.sleep(0.05)
 
         # 3. Verify total conversation state in DB: 4 messages across 2 models
         messages_all = e2e_db.get_conversation_messages(conv_id, format="raw")
@@ -119,8 +131,15 @@ class TestCrossArenaToChatGPT:
                     "max_tokens": 512
                 }
 
-            resp = e2e_client.post(f"{mock_gateway_server.url}{endpoint}", json=payload)
+            resp = e2e_client.post(
+                f"{mock_gateway_server.url}{endpoint}",
+                json=payload,
+                headers={"Connection": "close"}
+            )
             assert resp.status_code == 200, f"Turn with {model} failed: {resp.text}"
+
+        import time
+        time.sleep(0.1)
 
         # Verify DB records all 6 turns in sequence
         stored = e2e_db.get_conversation_messages(conv_id, format="raw")
@@ -209,7 +228,10 @@ class TestCrossArenaToChatGPT:
         )
 
         # Query GET /v1/conversations
-        list_resp = e2e_client.get(f"{mock_gateway_server.url}/v1/conversations")
+        list_resp = e2e_client.get(
+            f"{mock_gateway_server.url}/v1/conversations",
+            headers={"Connection": "close"}
+        )
         assert list_resp.status_code == 200
         threads = list_resp.json()["data"]
         found = next((t for t in threads if t["id"] == conv_id), None)
@@ -223,9 +245,13 @@ class TestCrossArenaToChatGPT:
                 "model": "gpt-4o",
                 "conversation_id": conv_id,
                 "messages": [{"role": "user", "content": "What is the optimal video length?"}]
-            }
+            },
+            headers={"Connection": "close"}
         )
         assert post_resp.status_code == 200
+
+        import time
+        time.sleep(0.05)
 
         # Verify metadata remains unchanged after update
         conv_record = e2e_db.get_conversation(conv_id)
@@ -251,9 +277,13 @@ class TestCrossArenaToChatGPT:
                 "model": "gpt-4o",
                 "conversation_id": fresh_cid,
                 "messages": [{"role": "user", "content": "Initial ping for unseen conversation."}]
-            }
+            },
+            headers={"Connection": "close"}
         )
         assert resp.status_code == 200, f"Expected 200 on auto-init, got: {resp.status_code} - {resp.text}"
+
+        import time
+        time.sleep(0.05)
 
         # Verify thread was created in DB
         conv = e2e_db.get_conversation(fresh_cid)

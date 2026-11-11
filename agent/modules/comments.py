@@ -34,6 +34,9 @@ _URL_RE = re.compile(r"https?://|www\.", re.IGNORECASE)
 
 
 def _get_youtube_service():
+    if not os.environ.get("YT_REFRESH_TOKEN") or not os.environ.get("YT_CLIENT_ID"):
+        logger.info("comments: YouTube OAuth not configured; comment bot decommissioned.")
+        return None
     from googleapiclient.discovery import build
     from google.oauth2.credentials import Credentials
     from google.auth.transport.requests import Request as GoogleRequest
@@ -41,7 +44,7 @@ def _get_youtube_service():
         token=None,
         refresh_token=os.environ["YT_REFRESH_TOKEN"],
         client_id=os.environ["YT_CLIENT_ID"],
-        client_secret=os.environ["YT_CLIENT_SECRET"],
+        client_secret=os.environ.get("YT_CLIENT_SECRET", ""),
         token_uri="https://oauth2.googleapis.com/token",
         scopes=["https://www.googleapis.com/auth/youtube.force-ssl"],
     )

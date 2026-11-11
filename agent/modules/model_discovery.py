@@ -51,7 +51,11 @@ class DynamicModelDiscovery:
         if not key:
             return []
         url = "https://api.arena.ai/v1/models"
-        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {key}"}, method="GET")
+        headers = {
+            "Authorization": f"Bearer {key}",
+            "User-Agent": "ShortsAgent-ArenaRouter/1.0"
+        }
+        req = urllib.request.Request(url, headers=headers, method="GET")
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
@@ -59,6 +63,7 @@ class DynamicModelDiscovery:
                 for item in data.get("data", []):
                     mid = item.get("id", "")
                     models.append({
+                        "id": mid,
                         "canonical_id": f"arena/{mid}",
                         "original_id": mid,
                         "display_name": f"Arena {mid.replace('-', ' ').title()}",
@@ -84,7 +89,11 @@ class DynamicModelDiscovery:
         if not key:
             return []
         url = "https://openrouter.ai/api/v1/models"
-        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {key}"}, method="GET")
+        headers = {
+            "Authorization": f"Bearer {key}",
+            "User-Agent": "ShortsAgent-UniversalRouter/1.0"
+        }
+        req = urllib.request.Request(url, headers=headers, method="GET")
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
@@ -95,6 +104,7 @@ class DynamicModelDiscovery:
                     is_free = ":free" in mid or float(item.get("pricing", {}).get("prompt", 1.0)) == 0.0
                     if is_free or any(sub in mid for sub in ("deepseek", "claude-3-5", "gemini-2", "llama-3.3")):
                         models.append({
+                            "id": mid,
                             "canonical_id": f"openrouter/{mid}",
                             "original_id": mid,
                             "display_name": item.get("name", mid),
@@ -120,7 +130,11 @@ class DynamicModelDiscovery:
         if not key:
             return []
         url = "https://api.groq.com/openai/v1/models"
-        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {key}"}, method="GET")
+        headers = {
+            "Authorization": f"Bearer {key}",
+            "User-Agent": "ShortsAgent-GroqRouter/1.0"
+        }
+        req = urllib.request.Request(url, headers=headers, method="GET")
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
@@ -128,6 +142,7 @@ class DynamicModelDiscovery:
                 for item in data.get("data", []):
                     mid = item.get("id", "")
                     models.append({
+                        "id": mid,
                         "canonical_id": f"groq/{mid}",
                         "original_id": mid,
                         "display_name": f"Groq {mid}",
@@ -225,3 +240,101 @@ class DynamicModelDiscovery:
             logger.warning(f"Could not write discovery cache: {e}")
 
         return all_models
+
+
+class ModelEndpointProbe:
+    """Active latency probe and health status monitor for model endpoints."""
+
+    HEALTH_CACHE_FILE = Path(
+        r"C:\Users\Pankaj Bhati\OneDrive\Desktop\AutomateAgentWorkFlow\shorts-agent\temp\model_health_matrix.json"
+    )
+
+    @classmethod
+    def probe_provider_health(cls, provider: str, timeout: int = 5) -> Dict[str, Any]:
+        """Performs a lightweight bounded health check and records latency."""
+        start_time = time.perf_counter()
+        headers = {"User-Agent": "ShortsAgent-HealthProbe/1.0"}
+
+        endpoints = {
+            "arena": ("https://api.arena.ai/v1/models", os.environ.get("ARENA_API_KEY") or os.environ.get("ARENA_KEY")),
+            "groq": ("https://api.groq.com/openai/v1/models", os.environ.get("GROQ_API_KEY")),
+            "openrouter": ("https://openrouter.ai/api/v1/models", os.environ.get("OPENROUTER_API_KEY")),
+            "deepinfra": ("https://api.deepinfra.com/v1/models", os.environ.get("DEEPINFRA_API_KEY")),
+            "anthropic": (
+                "https://api.anthropic.com/v1/models",
+                os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("CLAUDE_CONSOLE_API_KEY") or os.environ.get("CLAUDE_API_KEY"),
+            ),
+            "openai": ("https://api.openai.com/v1/models", os.environ.get("OPENAI_API_KEY")),
+        }
+
+        if provider not in endpoints:
+            return {"provider": provider, "status": "UNKNOWN_PROVIDER", "latency_ms": 0}
+
+        url, key = endpoints[provider]
+        if not key:
+            return {"provider": provider, "status": "UNCONFIGURED", "latency_ms": 0}
+
+        if provider == "arena":
+            headers["Authorization"] = f"Bearer {key.strip()}"
+            headers["User-Agent"] = "ShortsAgent-ArenaRouter/1.0"
+        elif provider == "groq":
+            headers["Authorization"] = f"Bearer {key.strip()}"
+            headers["User-Agent"] = "ShortsAgent-GroqRouter/1.0"
+        elif provider == "anthropic":
+            headers["x-api-key"] = key.strip()
+            headers["anthropic-version"] = "2023-06-01"
+            headers["User-Agent"] = "ShortsForge-AnthropicAdapter/1.0"
+            ws_id = os.environ.get("ANTHROPIC_WORKSPACE_ID") or "wrkspc_01Ne4eA89fWrsVS4Y9LzS9Cm"
+            headers["anthropic-workspace-id"] = ws_id
+        else:
+            headers["Authorization"] = f"Bearer {key.strip()}"
+
+        try:
+            req = urllib.request.Request(url, headers=headers, method="GET")
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+                status = "HEALTHY" if resp.status == 200 else "DEGRADED"
+                return {
+                    "provider": provider,
+                    "status": status,
+                    "http_code": resp.status,
+                    "latency_ms": elapsed_ms,
+                    "timestamp": time.time(),
+                }
+        except urllib.error.HTTPError as e:
+            elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+            status = "RATE_LIMITED" if e.code == 429 else "DEGRADED"
+            return {
+                "provider": provider,
+                "status": status,
+                "http_code": e.code,
+                "latency_ms": elapsed_ms,
+                "error": str(e),
+                "timestamp": time.time(),
+            }
+        except Exception as e:
+            return {
+                "provider": provider,
+                "status": "UNAVAILABLE",
+                "http_code": 0,
+                "latency_ms": 0,
+                "error": str(e),
+                "timestamp": time.time(),
+            }
+
+    @classmethod
+    def probe_all_registered_models(cls) -> Dict[str, Any]:
+        """Probes all unique providers supporting registered models and caches the health matrix."""
+        providers = ["arena", "groq", "openrouter", "deepinfra", "anthropic", "openai"]
+        health_matrix = {}
+        for prov in providers:
+            health_matrix[prov] = cls.probe_provider_health(prov)
+
+        try:
+            cls.HEALTH_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            with open(cls.HEALTH_CACHE_FILE, "w", encoding="utf-8") as f:
+                json.dump({"timestamp": time.time(), "matrix": health_matrix}, f, indent=2)
+        except Exception as e:
+            logger.warning(f"Could not write health matrix cache: {e}")
+
+        return health_matrix

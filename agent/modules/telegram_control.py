@@ -177,6 +177,12 @@ class ShortsForgeCommandHandler:
             return self._cmd_refresh_models()
         elif command == "/effort":
             return self._cmd_effort(arg)
+        elif command == "/sessions":
+            return self._cmd_sessions(arg)
+        elif command == "/session":
+            return self._cmd_session_detail(arg)
+        elif command == "/route":
+            return self._cmd_route_session(arg)
         elif command == "/trends":
             return self._cmd_trends(arg)
         elif command == "/create":
@@ -202,10 +208,13 @@ class ShortsForgeCommandHandler:
     def _cmd_help(self) -> str:
         help_text = (
             "🛠 <b>SHORTS FORGE — Master Operator Console</b>\n\n"
-            "<b>Model Freedom & Intelligence:</b>\n"
+            "<b>Model Freedom & Sessions Routing:</b>\n"
             "• <code>/models</code> — View universal catalog & active model\n"
             "• <code>/model &lt;name&gt;</code> — Switch active model (e.g. <code>/model claude</code>, <code>/model deepseek</code>)\n"
-            "• <code>/effort &lt;low|medium|high|max&gt;</code> — Adjust reasoning & thinking depth\n\n"
+            "• <code>/effort &lt;low|medium|high|max&gt;</code> — Adjust reasoning & thinking depth\n"
+            "• <code>/sessions [platform]</code> — List cross-platform sessions (Claude/Arena/ChatGPT)\n"
+            "• <code>/session &lt;id&gt;</code> — Inspect session turns across platforms\n"
+            "• <code>/route &lt;id&gt; &lt;platform&gt; [model]</code> — Route session to another platform\n\n"
             "<b>Production & Strategy:</b>\n"
             "• <code>/create &lt;topic&gt;</code> — Start autonomous 4-input production\n"
             "• <code>/trends [niche]</code> — Scan Trend Radar & Chaos Signals\n"
@@ -213,11 +222,11 @@ class ShortsForgeCommandHandler:
             "<b>Monitoring & System Health:</b>\n"
             "• <code>/status</code> — Live quota, provider handshakes, & runs\n"
             "• <code>/audit</code> — Security audit trail & anomaly detection\n\n"
-            "<b>Publishing Controls:</b>\n"
-            "• <code>/approve &lt;video_id&gt;</code> — Authorize Short for YouTube\n"
+            "<b>Autonomous Production & Export Controls:</b>\n"
+            "• <code>/approve &lt;video_id&gt;</code> — Authorize video for final delivery / export\n"
             "• <code>/reject &lt;video_id&gt;</code> — Quarantine candidate video\n"
-            "• <code>/pause</code> — Emergency kill-switch (pause all publishing)\n"
-            "• <code>/resume</code> — Resume autonomous publishing"
+            "• <code>/pause</code> — Emergency kill-switch (pause autonomous video production)\n"
+            "• <code>/resume</code> — Resume autonomous video production"
         )
         notify("HELP_MANUAL", help_text, level="info")
         return "HELP_DELIVERED"
@@ -464,22 +473,24 @@ class ShortsForgeCommandHandler:
         return "AUDIT_DELIVERED"
 
     def _cmd_pause(self) -> str:
+        os.environ["PAUSE_PRODUCTION"] = "true"
         os.environ["PAUSE_PUBLISHING"] = "true"
-        notify("AUTO_PAUSE", "⏸ <b>Publishing Paused</b> by operator command.", level="warn")
-        log_event("PUBLISHING_PAUSED", status="SUCCESS")
+        notify("AUTO_PAUSE", "⏸ <b>Autonomous Production Paused</b> by operator command.", level="warn")
+        log_event("PRODUCTION_PAUSED", status="SUCCESS")
         return "PAUSED"
 
     def _cmd_resume(self) -> str:
+        os.environ["PAUSE_PRODUCTION"] = "false"
         os.environ["PAUSE_PUBLISHING"] = "false"
-        notify("RESUMED", "▶️ <b>Publishing Resumed</b> by operator command.", level="success")
-        log_event("PUBLISHING_RESUMED", status="SUCCESS")
+        notify("RESUMED", "▶️ <b>Autonomous Production Resumed</b> by operator command.", level="success")
+        log_event("PRODUCTION_RESUMED", status="SUCCESS")
         return "RESUMED"
 
     def _cmd_approve(self, video_id_str: str) -> str:
         if not video_id_str:
             notify("APPROVE_ERROR", "⚠️ Please provide video ID: <code>/approve 1</code>", level="warn")
             return "MISSING_ID"
-        notify("APPROVAL_CONFIRMED", f"✅ Video #{video_id_str} approved for publishing.", level="success")
+        notify("APPROVAL_CONFIRMED", f"✅ Video #{video_id_str} approved for final export and delivery.", level="success")
         log_event("VIDEO_APPROVED_MANUALLY", details={"video_id": video_id_str})
         return "APPROVED"
 
@@ -490,3 +501,57 @@ class ShortsForgeCommandHandler:
         notify("REJECTION_CONFIRMED", f"❌ Video #{video_id_str} rejected and quarantined.", level="warn")
         log_event("VIDEO_REJECTED_MANUALLY", details={"video_id": video_id_str})
         return "REJECTED"
+
+    def _cmd_sessions(self, platform_filter: str) -> str:
+        from agent.modules.session_router import SessionRouter
+        sr = SessionRouter()
+        sessions = sr.list_sessions(platform=platform_filter or None, limit=15)
+        if not sessions:
+            notify("SESSIONS_EMPTY", "📭 No cross-platform sessions recorded yet.", level="info")
+            return "SESSIONS_EMPTY"
+        lines = [f"🔀 <b>Cross-Platform Sessions</b> ({len(sessions)} shown)\n"]
+        for s in sessions:
+            plats = ", ".join(s["routed_platforms"])
+            lines.append(f"• <code>{s['session_id']}</code> — <b>{s['title'][:32]}</b>")
+            lines.append(f"  Platforms: <code>{plats}</code> | Active: <code>{s['active_platform']}</code> ({s['message_count']} msgs)")
+        lines.append("\n<i>Inspect: <code>/session &lt;id&gt;</code> | Route: <code>/route &lt;id&gt; chatgpt</code></i>")
+        notify("SESSIONS_LIST", "\n".join(lines), level="info")
+        return "SESSIONS_DELIVERED"
+
+    def _cmd_session_detail(self, arg: str) -> str:
+        if not arg:
+            notify("SESSION_ERROR", "⚠️ Provide session ID: <code>/session &lt;id&gt;</code>", level="warn")
+            return "MISSING_ID"
+        from agent.modules.session_router import SessionRouter
+        s = SessionRouter().get_session(arg.strip())
+        if not s:
+            notify("SESSION_NOT_FOUND", f"❓ Session <code>{arg}</code> not found.", level="warn")
+            return "SESSION_NOT_FOUND"
+        lines = [
+            f"💬 <b>{s['title']}</b> (<code>{s['session_id']}</code>)",
+            f"<b>Visible on:</b> {', '.join(s['visible_on_platforms'])}\n",
+        ]
+        for m in s["messages"][-8:]:
+            lines.append(f"• <b>[{m['platform']}] {m['role'].upper()}:</b> {m['content'][:160]}")
+        notify("SESSION_DETAIL", "\n".join(lines), level="info")
+        return "SESSION_DELIVERED"
+
+    def _cmd_route_session(self, arg: str) -> str:
+        parts = arg.split()
+        if len(parts) < 2:
+            notify("ROUTE_ERROR", "⚠️ Usage: <code>/route &lt;session_id&gt; &lt;platform&gt; [model]</code>", level="warn")
+            return "MISSING_ARGS"
+        sid, plat = parts[0], parts[1]
+        mdl = parts[2] if len(parts) > 2 else None
+        from agent.modules.session_router import SessionRouter
+        try:
+            res = SessionRouter().route_session(sid, target_platform=plat, target_model=mdl)
+            notify(
+                "SESSION_ROUTED",
+                f"🔀 Session <code>{sid}</code> routed to <b>{res['routed_to']}</b> (<code>{res['model']}</code>).",
+                level="success",
+            )
+            return "SESSION_ROUTED"
+        except KeyError:
+            notify("SESSION_NOT_FOUND", f"❓ Session <code>{sid}</code> not found.", level="warn")
+            return "SESSION_NOT_FOUND"

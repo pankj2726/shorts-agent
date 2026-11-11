@@ -82,26 +82,29 @@ class E2ETestDB:
         with self.conn as cur:
             cur.executescript("""
                 CREATE TABLE IF NOT EXISTS conversations (
-                    id          TEXT PRIMARY KEY,
-                    title       TEXT,
-                    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    metadata    TEXT DEFAULT '{}'
+                    id               TEXT PRIMARY KEY,
+                    title            TEXT,
+                    default_provider TEXT,
+                    default_model    TEXT,
+                    created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    metadata         TEXT DEFAULT '{}'
                 );
 
                 CREATE TABLE IF NOT EXISTS messages (
-                    id              TEXT PRIMARY KEY,
-                    conversation_id TEXT NOT NULL,
-                    role            TEXT NOT NULL,
-                    content         TEXT NOT NULL,
-                    model           TEXT NOT NULL,
-                    provider        TEXT NOT NULL,
-                    thinking        TEXT,
-                    tokens_in       INTEGER DEFAULT 0,
-                    tokens_out      INTEGER DEFAULT 0,
-                    latency_ms      INTEGER DEFAULT 0,
-                    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    metadata        TEXT DEFAULT '{}',
+                    id               TEXT PRIMARY KEY,
+                    conversation_id  TEXT NOT NULL,
+                    role             TEXT NOT NULL,
+                    content          TEXT NOT NULL,
+                    model            TEXT NOT NULL,
+                    provider         TEXT NOT NULL,
+                    thinking         TEXT,
+                    thinking_content TEXT,
+                    tokens_in        INTEGER DEFAULT 0,
+                    tokens_out       INTEGER DEFAULT 0,
+                    latency_ms       INTEGER DEFAULT 0,
+                    created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    metadata         TEXT DEFAULT '{}',
                     FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
                 );
 

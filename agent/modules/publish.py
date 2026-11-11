@@ -62,11 +62,19 @@ def upload_short(
         notify("QUOTA_LOW", "Cannot upload: insufficient quota for videos.insert (1600u)", level="warn")
         return None
 
-    # Check OAuth credentials
+    # Check OAuth credentials / decoupled router mode
     if not os.environ.get("YT_REFRESH_TOKEN"):
-        logger.warning("publish: YT_REFRESH_TOKEN not configured — routing to operator for manual review")
+        logger.info("publish: YouTube OAuth decoupled in AI Router pivot. Registering local media export.")
+        media_id = f"local_{video_id}"
+        conn = db.get_conn()
+        conn.execute(
+            "UPDATE videos SET yt_video_id=?, yt_status='rendered' WHERE id=?",
+            (media_id, video_id),
+        )
+        conn.commit()
+        conn.close()
         send_for_manual_review(video_id, video_path, title, {"tags": tags, "description": description})
-        return None
+        return media_id
 
     try:
         svc = _get_youtube_service()
@@ -160,25 +168,25 @@ def upload_short(
 
 
 def send_for_manual_review(video_id: int, video_path: str, title: str, metadata: dict) -> None:
-    """
-    When the API audit hasn't passed, send the MP4 to Telegram for manual scheduling.
-    Operator schedules it in YouTube Studio.
-    """
-    logger.info("publish: sending video_id=%s to Telegram for manual review", video_id)
+    """Send completed media asset to Telegram for operator delivery and review."""
+    logger.info("publish: delivering video_id=%s to Telegram", video_id)
     notify(
         "RENDER_DONE",
-        f"📲 Manual scheduling needed (audit pending).\n"
-        f"Title: {title}\n"
+        f"🎬 <b>Autonomous Video Asset Ready</b>\n"
+        f"Title: <b>{title}</b>\n"
         f"Tags: {', '.join(metadata.get('tags', []))}\n"
-        f"Schedule in YouTube Studio > Upload > Schedule",
+        f"Saved locally and ready for export.",
         level="action",
         video_path=video_path,
-        buttons=[[("✅ Scheduled in Studio", f"manual_ok:{video_id}"),
+        buttons=[[("✅ Confirm & Save", f"manual_ok:{video_id}"),
                   ("❌ Reject", f"manual_no:{video_id}")]],
     )
 
 
 def _get_youtube_service():
+    if not os.environ.get("YT_REFRESH_TOKEN") or not os.environ.get("YT_CLIENT_ID"):
+        logger.info("publish: YouTube credentials not present; YouTube publishing decommissioned.")
+        return None
     from googleapiclient.discovery import build
     from google.oauth2.credentials import Credentials
     from google.auth.transport.requests import Request as GoogleRequest
@@ -187,7 +195,7 @@ def _get_youtube_service():
         token=None,
         refresh_token=os.environ["YT_REFRESH_TOKEN"],
         client_id=os.environ["YT_CLIENT_ID"],
-        client_secret=os.environ["YT_CLIENT_SECRET"],
+        client_secret=os.environ.get("YT_CLIENT_SECRET", ""),
         token_uri="https://oauth2.googleapis.com/token",
         scopes=[
             "https://www.googleapis.com/auth/youtube.upload",

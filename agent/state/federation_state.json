@@ -1,6 +1,10 @@
 {
   "active_model": "claude-3-5-sonnet",
   "active_effort": "high",
-  "cooldowns": {},
-  "updated_at": 1794398195.082176
+  "cooldowns": {
+    "claude-3-5-sonnet:arena": 1794429513.343192,
+    "claude-3-5-sonnet:openrouter": 1794429663.3356543,
+    "claude-3-5-sonnet:omniroute": 1794429513.3186371
+  },
+  "updated_at": 1794429483.343192
 }

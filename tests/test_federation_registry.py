@@ -6,7 +6,19 @@ import time
 import pytest
 from unittest.mock import patch
 
+from agent.modules import federation_registry
 from agent.modules.federation_registry import FederationRegistry, CanonicalModel, ModelRoute
+
+
+@pytest.fixture(autouse=True)
+def isolated_federation_state(tmp_path, monkeypatch):
+    """Isolate FederationRegistry state from on-disk cooldowns during tests."""
+    monkeypatch.setattr(federation_registry, "STATE_PATH", tmp_path / "federation_state.json")
+    FederationRegistry._initialized = False
+    FederationRegistry._models = {}
+    yield
+    FederationRegistry._initialized = False
+    FederationRegistry._models = {}
 
 
 def test_federation_initialization():

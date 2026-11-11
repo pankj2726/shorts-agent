@@ -796,6 +796,11 @@ class UniversalCapabilityRegistry:
         return out
 
     @classmethod
+    def list_unlocked_models(cls) -> List[Dict[str, Any]]:
+        """Alias for get_all_models() returning unlocked models."""
+        return cls.get_all_models()
+
+    @classmethod
     def translate_parameters(
         cls,
         canonical_id: str,

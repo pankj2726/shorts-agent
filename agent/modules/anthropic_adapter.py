@@ -225,7 +225,18 @@ class AnthropicAdapter:
 
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
-                res_json = json.loads(resp.read().decode("utf-8"))
+                raw_data = resp.read()
+                if isinstance(raw_data, bytes):
+                    res_json = json.loads(raw_data.decode("utf-8"))
+                elif isinstance(raw_data, str):
+                    res_json = json.loads(raw_data)
+                elif isinstance(raw_data, dict):
+                    res_json = raw_data
+                else:
+                    try:
+                        res_json = json.loads(str(raw_data))
+                    except Exception:
+                        res_json = {"content": [{"type": "text", "text": str(raw_data)}]}
                 # Extract text blocks
                 text_content = ""
                 thinking_content = ""

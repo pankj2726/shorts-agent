@@ -34,8 +34,8 @@ export default {
     // Standard CORS Headers
     const corsHeaders = {
       "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, X-Session-ID, X-Workspace-Identity",
+      "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, X-Session-ID, X-Conversation-ID, X-Platform, X-Workspace-Identity",
     };
 
     if (request.method === "OPTIONS") {
@@ -83,9 +83,69 @@ export default {
       });
     }
 
-    // 3. Persistent Conversation History from R2 (/v1/conversations)
+    // 3. Cross-Platform Sessions Routing (/v1/sessions & /v1/conversations)
+    if (url.pathname === "/v1/sessions" && request.method === "GET") {
+      const platformFilter = url.searchParams.get("platform");
+      const sessions = [];
+      if (env.WORKSPACE_CACHE) {
+        try {
+          const listed = await env.WORKSPACE_CACHE.list({ prefix: "conversations/" });
+          for (const obj of listed.objects || []) {
+            const sid = obj.key.replace(/^conversations\//, "").replace(/\.json$/, "");
+            const rec = await env.WORKSPACE_CACHE.get(obj.key);
+            const raw = rec ? await rec.json() : [];
+            const turns = Array.isArray(raw) ? raw : (raw.messages || []);
+            const platforms = Array.from(new Set(turns.map((t) => t.provider || t.platform).filter(Boolean)));
+            const visibleOn = Array.from(new Set(["claude", "arena", "chatgpt", "openrouter", "groq", ...platforms]));
+            if (!platformFilter || visibleOn.includes(platformFilter.toLowerCase())) {
+              sessions.push({
+                session_id: sid,
+                conversation_id: sid,
+                routed_platforms: platforms,
+                visible_on_platforms: visibleOn,
+                message_count: turns.length,
+                updated_at: obj.uploaded,
+              });
+            }
+          }
+        } catch (e) {}
+      }
+      return new Response(JSON.stringify({ sessions, count: sessions.length }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (url.pathname.startsWith("/v1/sessions/") && request.method === "GET") {
+      const sid = url.pathname.replace("/v1/sessions/", "").split("/")[0];
+      let turns = [];
+      if (env.WORKSPACE_CACHE) {
+        try {
+          const existing = await env.WORKSPACE_CACHE.get(`conversations/${sid}.json`);
+          if (existing) turns = await existing.json();
+        } catch (e) {}
+      }
+      return new Response(JSON.stringify({ session_id: sid, conversation_id: sid, messages: turns }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (url.pathname.startsWith("/v1/sessions/") && request.method === "DELETE") {
+      const sid = url.pathname.replace("/v1/sessions/", "").split("/")[0];
+      if (env.WORKSPACE_CACHE) {
+        await env.WORKSPACE_CACHE.delete(`conversations/${sid}.json`);
+      }
+      return new Response(JSON.stringify({ deleted: true, session_id: sid }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     if (url.pathname.startsWith("/v1/conversations") && request.method === "GET") {
-      const sessionId = url.searchParams.get("session_id") || "default_session";
+      const sessionId =
+        request.headers.get("X-Session-ID") ||
+        request.headers.get("X-Conversation-ID") ||
+        url.searchParams.get("session_id") ||
+        url.searchParams.get("conversation_id") ||
+        "default_session";
       let history = [];
 
       if (env.WORKSPACE_CACHE) {
@@ -99,7 +159,7 @@ export default {
         }
       }
 
-      return new Response(JSON.stringify({ session_id: sessionId, conversations: history }), {
+      return new Response(JSON.stringify({ session_id: sessionId, conversation_id: sessionId, conversations: history }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -110,7 +170,12 @@ export default {
       const messages = payload.messages || [];
       const model = payload.model || "coding-router-preview";
       const effort = payload.reasoning_effort || "high";
-      const sessionId = request.headers.get("X-Session-ID") || payload.session_id || "default_session";
+      const sessionId =
+        request.headers.get("X-Session-ID") ||
+        request.headers.get("X-Conversation-ID") ||
+        payload.session_id ||
+        payload.conversation_id ||
+        "default_session";
 
       // Determine Primary Route & Upstream Providers
       let result = null;

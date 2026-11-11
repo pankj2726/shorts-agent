@@ -20,11 +20,7 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 # Safe environment loader
-def _load_env_safe()
-
-# Aliases
-if not os.environ.get("FAL_KEY") and os.environ.get("FAL_AI_API_KEY"):
-    os.environ["FAL_KEY"] = os.environ["FAL_AI_API_KEY"] -> None:
+def _load_env_safe() -> None:
     for c in [Path(r"C:\Secrets\shorts-agent.env"), Path(r"C:\Secrets\.env"), Path(".env")]:
         if c.exists():
             try:

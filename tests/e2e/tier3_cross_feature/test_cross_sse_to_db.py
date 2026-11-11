@@ -21,6 +21,13 @@ from tests.e2e.conftest import (
     parse_openai_sse,
     extract_sse_text,
 )
+import tests.e2e.conftest as conftest_module
+
+
+@pytest.fixture(autouse=True)
+def force_ephemeral_port(monkeypatch: pytest.MonkeyPatch):
+    """Ensure each mock gateway server binds to a unique ephemeral port to avoid Windows SO_REUSEADDR port collision."""
+    monkeypatch.setattr(conftest_module, "_find_available_port", lambda preferred=0: 0)
 
 
 class TestCrossSseToDb:
@@ -224,10 +231,14 @@ class TestCrossSseToDb:
         resp = e2e_client.post(
             f"{mock_gateway_server.url}/v1/chat/completions",
             json=payload,
+            headers={"Connection": "close"},
             stream=True
         )
         assert resp.status_code == 200
         streamed_text = extract_sse_text(resp)
+
+        import time
+        time.sleep(0.05)
 
         msgs = e2e_db.get_conversation_messages(conv_id, format="raw")
         assert len(msgs) == 2
