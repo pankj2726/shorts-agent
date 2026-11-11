@@ -50,6 +50,7 @@ class AnthropicAdapter:
     def get_api_key(cls) -> Optional[str]:
         return (
             os.environ.get("ANTHROPIC_API_KEY")
+            or os.environ.get("CLAUDE_CONSOLE_API_KEY")
             or os.environ.get("CLAUDE_API_KEY")
             or os.environ.get("ANTHROPIC_OAT_TOKEN")
         )
@@ -69,6 +70,10 @@ class AnthropicAdapter:
         org_id = os.environ.get("ANTHROPIC_ORG_ID")
         if org_id:
             headers["anthropic-organization-id"] = org_id.strip()
+
+        ws_id = os.environ.get("ANTHROPIC_WORKSPACE_ID") or os.environ.get("CLAUDE_WORKSPACE_ID")
+        if ws_id:
+            headers["anthropic-workspace-id"] = ws_id.strip()
 
         return headers
 
@@ -125,30 +130,41 @@ class AnthropicAdapter:
     @classmethod
     def complete(
         cls,
-        prompt: str,
+        prompt: Optional[str] = None,
         system_prompt: Optional[str] = None,
+        messages: Optional[List[Dict[str, Any]]] = None,
         model: str = "claude-3-5-sonnet-20241022",
         effort: Optional[str] = None,
+        reasoning_effort: Optional[str] = None,
         thinking_budget: Optional[int] = None,
         max_tokens: int = 4096,
+        system: Optional[str] = None,
         timeout: int = 45
     ) -> Dict[str, Any]:
         """
         Executes a completion against the Anthropic Messages API.
         """
         url = f"{cls.BASE_URL}/messages"
+
+        # Normalize prompt / messages
+        if messages:
+            formatted_messages = messages
+        elif prompt:
+            formatted_messages = [{"role": "user", "content": prompt}]
+        else:
+            formatted_messages = [{"role": "user", "content": "ping"}]
+
         payload: Dict[str, Any] = {
             "model": model,
             "max_tokens": max_tokens,
-            "messages": [
-                {"role": "user", "content": prompt}
-            ]
+            "messages": formatted_messages
         }
-        if system_prompt:
-            payload["system"] = system_prompt
+        effective_system = system or system_prompt
+        if effective_system:
+            payload["system"] = effective_system
 
         # Extended Thinking / Reasoning configuration
-        eff = (effort or "high").lower()
+        eff = (effort or reasoning_effort or "high").lower()
         if "sonnet" in model or "opus" in model or "3-7" in model:
             budget = thinking_budget or (4096 if eff in ("high", "max") else 2048)
             # When thinking is enabled, max_tokens must be greater than budget_tokens

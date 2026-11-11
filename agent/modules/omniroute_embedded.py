@@ -192,7 +192,7 @@ class EmbeddedOmniRoute:
                     res["effort"] = active_effort
                     return res
 
-                elif prov == "anthropic" and (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("CLAUDE_API_KEY")):
+                elif prov == "anthropic" and (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("CLAUDE_CONSOLE_API_KEY") or os.environ.get("CLAUDE_API_KEY")):
                     from agent.modules.anthropic_adapter import AnthropicAdapter
                     res = AnthropicAdapter.complete(
                         model=target_model,

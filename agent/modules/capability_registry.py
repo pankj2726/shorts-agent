@@ -384,6 +384,8 @@ class UniversalCapabilityRegistry:
                 available_providers.append(prov)
             elif prov == "openai" and (os.environ.get("OPENAI_API_KEY") or os.environ.get("CHATGPT_API_KEY")):
                 available_providers.append(prov)
+            elif prov == "anthropic" and (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("CLAUDE_CONSOLE_API_KEY") or os.environ.get("CLAUDE_API_KEY")):
+                available_providers.append(prov)
             elif prov == "vertex_ai" and (os.environ.get("VERTEX_API_KEY") or os.environ.get("GEMINI_API_KEY")):
                 available_providers.append(prov)
 
