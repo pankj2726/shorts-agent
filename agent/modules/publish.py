@@ -62,7 +62,18 @@ def upload_short(
         notify("QUOTA_LOW", "Cannot upload: insufficient quota for videos.insert (1600u)", level="warn")
         return None
 
-    svc = _get_youtube_service()
+    # Check OAuth credentials
+    if not os.environ.get("YT_REFRESH_TOKEN"):
+        logger.warning("publish: YT_REFRESH_TOKEN not configured — routing to operator for manual review")
+        send_for_manual_review(video_id, video_path, title, {"tags": tags, "description": description})
+        return None
+
+    try:
+        svc = _get_youtube_service()
+    except Exception as e:
+        logger.error("publish: failed to initialize YouTube service: %s", e)
+        send_for_manual_review(video_id, video_path, title, {"tags": tags, "description": description})
+        return None
 
     body = {
         "snippet": {
