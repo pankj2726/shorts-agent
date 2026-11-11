@@ -32,67 +32,36 @@
 - [x] Agent definition files: `AGENT.md` for all 5 agents + Orchestrator
 - [x] Provider registry: `agents/agent-4-providers/registry/providers.json`
 - [x] Roadmap: `roadmap/ROADMAP.md`
-- [ ] Task ownership tracker: `architecture/task-ownership.md`
-- [ ] Communication protocol implementation: `logs/agent-comms.jsonl`
-- [ ] Shared quota tracker: `agent/state/quota_tracker.json`
+- [x] Task ownership tracker: `architecture/task-ownership.md`
+- [x] Communication protocol implementation: `logs/agent-comms.jsonl`
+- [x] Shared quota tracker & audit trail: `agent/modules/audit.py` & SQLite `audit_logs`
 
 ---
 
-## Upcoming Milestones
+## Completed Milestones (Continued)
 
-### ⏳ M2 — Research & Skills Engine
-**Priority:** HIGH  
-**Estimated effort:** 2–3 sessions
+### ✅ M2 — Research & Skills Engine (Complete)
+- `skills/youtube-shorts-research/SKILL.md` (v0.2.0-beta)
+- `skills/retention-optimization/SKILL.md`
+- `skills/niche-discovery/SKILL.md`
+- Trend Radar & Chaos Signals engine (`trend_radar.py` + GitHub Actions daily scan)
 
-**Tasks:**
-1. Scaffold `skills/` directory with first 3 skills:
-   - `youtube-shorts-research/SKILL.md`
-   - `humanized-scriptwriting/SKILL.md`
-   - `retention-optimization/SKILL.md`
-2. Run research on YouTube Shorts algorithm (2026 state)
-3. Document verified hook formulas with evidence
-4. Create audience persona for "QuickTech Hacks" niche
-5. Promote first skill to Beta after testing on 3 real scripts
+### ✅ M3 — Anti-Slop Engine (Complete)
+- `agent/modules/qa2.py` 6-stage review pipeline (100% tests passing)
+- Backfilled QA2 evaluation across all 10 scripts (10/10 passed)
+- 100-Point Explainable Viral Potential Model (`viral_score.py`)
 
-### ⏳ M3 — Anti-Slop Engine
-**Priority:** HIGH  
-**Estimated effort:** 1–2 sessions
+### ✅ M5 — AI Provider Infrastructure & Resilience (Complete)
+- In-project embedded router (`omniroute_embedded.py`)
+- 24/7 Cloudflare Worker edge router (`deploy/cloudflare-router/`)
+- Python 3.12 future-proofed across all workflows and Dockerfile
+- Zero-cost Pollinations AI (435 free models) & OpenRouter fallbacks
 
-**Tasks:**
-1. Implement `qa2.py` module with 6-stage review pipeline
-2. Create scoring rubric JSON schema
-3. Backfill QA Stage A evaluation for all 10 existing scripts
-4. Create 3 "PASS" examples and 3 "REJECT" anti-pattern examples
-5. Integrate verdict into SQLite `videos` table (`qa2_stage`, `qa2_score`, `qa2_verdict`)
+---
 
-### ⏳ M4 — Social Intelligence
-**Priority:** MEDIUM  
-**Estimated effort:** 2 sessions
+## Active Milestone
 
-**Tasks:**
-1. Implement `social.py` module using YouTube Data API v3
-2. Build channel analytics reader (views, retention, top videos)
-3. Build competitor discovery (search top channels in niche)
-4. Build comment sentiment analyzer
-5. Create audience persona: "QuickTech Hacks" viewer profile
-6. All writes/comments/interactions: draft only, require user authorization
-
-### ⏳ M5 — AI Provider Infrastructure  
-**Priority:** HIGH  
-**Estimated effort:** 2 sessions
-
-**Tasks:**
-1. Implement `agent/router.py` — task-aware model selector
-2. Implement `agent/quota_tracker.py` — persistent quota management
-3. Implement `scripts/health_check.py` — provider health monitoring
-4. Run Free LLM Tournament (Experiment 01): Gemini vs OpenRouter vs Groq
-5. Test ACE-Step 1.5 locally (Experiment 02)
-6. Test WhisperX (Experiment 03)
-7. Update provider registry with verified results
-
-### ⏳ M6 (Remaining) — Publishing & Autonomous Operations (Phase 4)
-**Priority:** HIGH — NEXT IMMEDIATE STEP  
-**Estimated effort:** 1 session
+### 🔄 M4 & M6 — Social Intelligence & Live Publishing Operations
 
 **Tasks:**
 1. Test `publish.upload_short()` — private/unlisted upload of `video_1_final.mp4`
