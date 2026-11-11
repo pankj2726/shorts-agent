@@ -36,14 +36,19 @@
   - Solves the local server dependency: eliminates the need to keep PowerShell or a local PC running.
   - Pushed to GitHub: commit `da0e5aa`.
 
+- [x] **Frame-by-Frame Storyboard Engine (`storyboard.py`):**
+  - High-retention pacing enforcement (<= 4.0s cuts, Hook -> Demo -> Payoff -> CTA).
+  - Kinetic typography highlights and sound effect cue assignments.
+  - Unit tests verified: `tests/test_storyboard.py` (3/3 passing).
+
 ---
 
 ## 2. Next
 
 - [ ] **Phase 4 YouTube Upload Test:**
-  - Test `publish.upload_short()` for `video_1_final.mp4` in unlisted mode upon user approval.
-- [ ] **Frame-by-Frame Storyboard Engine:**
-  - Build `agent/modules/storyboard.py` to convert 4-input prompts into production-ready JSON storyboard sheets.
+  - Test `publish.upload_short()` for `video_1_final.mp4` in unlisted mode upon explicit user approval.
+- [ ] **Multi-Modal Visual Ingestion:**
+  - Ingest reference images and video URLs directly into storyboard prompts.
 
 ---
 
