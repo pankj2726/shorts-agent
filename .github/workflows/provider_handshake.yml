@@ -1,0 +1,54 @@
+name: Provider Handshake Verification
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_level:
+        description: 'Verification test level (health_probe | full_model_list)'
+        required: false
+        default: 'health_probe'
+
+env:
+  TZ: Asia/Kolkata
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  handshake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production  # Allows reading Environment Secrets if configured
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Unpack ENV_FILE if provided
+        if: "${{ secrets.ENV_FILE != '' }}"
+        run: |
+          echo "${{ secrets.ENV_FILE }}" > .env
+
+      - name: Run Provider Handshake Probe
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OMNIROUTE_API_KEY: ${{ secrets.OMNIROUTE_API_KEY }}
+          AGENTROUTER_API_KEY: ${{ secrets.AGENTROUTER_API_KEY }}
+          AGNES_API_KEY: ${{ secrets.AGNES_API_KEY }}
+          VERTEX_API_KEY: ${{ secrets.VERTEX_API_KEY }}
+          POLLINATIONS_API_KEY: ${{ secrets.POLLINATIONS_API_KEY }}
+          DEEPINFRA_API_KEY: ${{ secrets.DEEPINFRA_API_KEY }}
+          ANYAPI_API_KEY: ${{ secrets.ANYAPI_API_KEY }}
+          FAL_KEY: ${{ secrets.FAL_KEY }}
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          OPENCODE_API_BASE: ${{ vars.OPENCODE_API_BASE }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ vars.GCP_REGION }}
+        run: |
+          python scripts/verify_provider_handshake.py

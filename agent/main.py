@@ -413,9 +413,15 @@ def show_comms_log() -> None:
         print(f"[{msg.timestamp}] {msg.sender} -> {msg.recipient} | Action: {msg.action} | Task: {msg.task_id} | Conf: {msg.confidence}")
 
 
+def run_handshake() -> None:
+    """Runs Directive 6.1 provider handshake and secrets verification."""
+    from scripts.verify_provider_handshake import main as handshake_main
+    handshake_main()
+
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python -m agent.main [pipeline|orchestrate|engage|analytics|commands|smoke|comms]")
+        print("Usage: python -m agent.main [pipeline|orchestrate|engage|analytics|commands|smoke|comms|handshake]")
         sys.exit(1)
 
     cmd = sys.argv[1]
@@ -427,6 +433,7 @@ if __name__ == "__main__":
         "commands": run_commands,
         "smoke": run_smoke,
         "comms": show_comms_log,
+        "handshake": run_handshake,
     }
     fn = dispatch.get(cmd)
     if not fn:
