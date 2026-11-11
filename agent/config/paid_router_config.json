@@ -1,0 +1,132 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "version": "1.0.0",
+  "description": "Shorts Forge Enterprise Paid Model Routing & Workspace Handshake Configuration",
+  "workspace_handshake": {
+    "identity_email": "pankajbhati140@gmail.com",
+    "organization_name": "Shorts Forge AI Studio",
+    "tier": "Enterprise Multi-Model Studio",
+    "headers": {
+      "X-Workspace-Identity": "pankajbhati140@gmail.com",
+      "X-Organization-Name": "Shorts Forge AI Studio",
+      "User-Agent": "ShortsAgent-EnterpriseRouter/1.0"
+    }
+  },
+  "paid_routing_profiles": {
+    "arena_h100": {
+      "name": "Arena.AI Dedicated H100 SXM5 / H200 Clusters",
+      "description": "High-throughput frontier models billed under Arena organization router balance.",
+      "base_url": "https://api.arena.ai/v1",
+      "auth_env_key": "ARENA_API_KEY",
+      "priority": 1,
+      "models": {
+        "claude-coding-router-preview": {
+          "canonical_id": "claude-3-5-sonnet",
+          "provider_model": "claude-coding-router-preview",
+          "context_window": 1000000,
+          "max_output_tokens": 128000,
+          "reasoning_effort": "high",
+          "capabilities": ["code_generation", "extended_thinking", "vision", "tool_calling"]
+        },
+        "coding-router-preview": {
+          "canonical_id": "coding-router-preview",
+          "provider_model": "coding-router-preview",
+          "context_window": 128000,
+          "max_output_tokens": 8192,
+          "reasoning_effort": "high",
+          "capabilities": ["meta_routing", "code_generation", "tool_calling"]
+        },
+        "claude-fable-5-1": {
+          "canonical_id": "claude-fable",
+          "provider_model": "claude-fable-5-1",
+          "context_window": 200000,
+          "max_output_tokens": 8192,
+          "reasoning_effort": "medium",
+          "capabilities": ["creative_writing", "scriptwriting", "storyboarding"]
+        }
+      }
+    },
+    "anthropic_direct": {
+      "name": "Anthropic Claude Console / Organization API",
+      "description": "Direct Claude 3.5 Sonnet, 3.7 Sonnet, and Opus frontier reasoning.",
+      "base_url": "https://api.anthropic.com/v1",
+      "auth_env_key": "CLAUDE_CONSOLE_API_KEY",
+      "alt_auth_env_keys": ["ANTHROPIC_API_KEY", "CLAUDE_API_KEY"],
+      "priority": 2,
+      "custom_headers": {
+        "anthropic-version": "2023-06-01",
+        "anthropic-workspace-id": "${ANTHROPIC_WORKSPACE_ID}"
+      },
+      "models": {
+        "claude-3-7-sonnet-20250219": {
+          "canonical_id": "claude-3-7-sonnet",
+          "provider_model": "claude-3-7-sonnet-20250219",
+          "context_window": 200000,
+          "max_output_tokens": 64000,
+          "thinking_budget_default": 4096,
+          "capabilities": ["hybrid_reasoning", "adaptive_thinking", "vision", "tool_calling"]
+        },
+        "claude-3-5-sonnet-20241022": {
+          "canonical_id": "claude-3-5-sonnet",
+          "provider_model": "claude-3-5-sonnet-20241022",
+          "context_window": 200000,
+          "max_output_tokens": 8192,
+          "thinking_budget_default": 4096,
+          "capabilities": ["extended_thinking", "vision", "tool_calling"]
+        },
+        "claude-3-5-haiku-20241022": {
+          "canonical_id": "claude-3-5-haiku",
+          "provider_model": "claude-3-5-haiku-20241022",
+          "context_window": 200000,
+          "max_output_tokens": 8192,
+          "capabilities": ["high_speed_inference", "vision", "tool_calling"]
+        }
+      }
+    },
+    "openai_direct": {
+      "name": "OpenAI / ChatGPT Organization API",
+      "description": "Direct OpenAI reasoning models (o1, o3-mini) and multimodal flagship (GPT-4o).",
+      "base_url": "https://api.openai.com/v1",
+      "auth_env_key": "OPENAI_API_KEY",
+      "priority": 3,
+      "models": {
+        "o1": {
+          "canonical_id": "o1",
+          "provider_model": "o1",
+          "context_window": 200000,
+          "max_output_tokens": 100000,
+          "reasoning_effort": "high",
+          "capabilities": ["deep_reasoning", "stem_reasoning", "vision"]
+        },
+        "o3-mini": {
+          "canonical_id": "o3-mini",
+          "provider_model": "o3-mini",
+          "context_window": 200000,
+          "max_output_tokens": 100000,
+          "reasoning_effort": "high",
+          "capabilities": ["fast_reasoning", "stem_reasoning", "tool_calling"]
+        },
+        "gpt-4o": {
+          "canonical_id": "gpt-4o",
+          "provider_model": "gpt-4o",
+          "context_window": 128000,
+          "max_output_tokens": 16384,
+          "capabilities": ["multimodal_vision", "structured_json", "tool_calling"]
+        }
+      }
+    }
+  },
+  "failover_circuit": {
+    "enabled": true,
+    "max_retries_per_tier": 2,
+    "retry_backoff_ms": 250,
+    "execution_chain": [
+      "arena_h100",
+      "anthropic_direct",
+      "openai_direct",
+      "openrouter_developer",
+      "groq_lpu",
+      "deepinfra_serverless"
+    ]
+  }
+}

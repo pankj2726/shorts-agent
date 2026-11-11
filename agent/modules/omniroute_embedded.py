@@ -159,7 +159,7 @@ class EmbeddedOmniRoute:
         Guarantees that an operation never stalls midway.
         """
         # Resolve active canonical model and effort from UniversalCapabilityRegistry if not explicitly provided
-        active_canonical = UniversalCapabilityRegistry.get_active_model()
+        active_canonical = model or UniversalCapabilityRegistry.get_active_model()
         active_effort = effort or UniversalCapabilityRegistry.get_active_effort()
         model_status = UniversalCapabilityRegistry.get_model_status(active_canonical)
 
@@ -183,7 +183,7 @@ class EmbeddedOmniRoute:
                     target_provider=prov,
                     effort=active_effort
                 )
-                target_model = model or p_params.get("model", active_canonical)
+                target_model = p_params.get("model", active_canonical)
 
                 if prov == "pollinations":
                     res = self._call_pollinations_text(prompt, system_prompt, target_model, timeout)
