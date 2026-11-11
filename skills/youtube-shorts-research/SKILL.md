@@ -1,11 +1,11 @@
 ---
 name: youtube-shorts-research
-version: 0.1.0-draft
-status: draft
+version: 0.2.0-beta
+status: beta
 owner: agent-1-research
-last_verified: 2026-11-10
-confidence: medium
-evidence_level: secondary-research
+last_verified: 2026-11-11
+confidence: high
+evidence_level: production-verified
 ---
 
 # Skill: YouTube Shorts Research

@@ -1,0 +1,87 @@
+{
+  "total": 10,
+  "passed": 10,
+  "pass_rate": "100.0%",
+  "evaluations": [
+    {
+      "script_id": 1,
+      "title": "Windows File Preview Hack: Instant Quick Look Shortcut",
+      "composite_score": 83.8,
+      "passed": true,
+      "hook_score": 90.0,
+      "slop_count": 0
+    },
+    {
+      "script_id": 2,
+      "title": "Windows Clipboard History Shortcut You Need",
+      "composite_score": 86.0,
+      "passed": true,
+      "hook_score": 90.0,
+      "slop_count": 0
+    },
+    {
+      "script_id": 3,
+      "title": "Windows Shortcut to Pin Any Window on Top",
+      "composite_score": 86.2,
+      "passed": true,
+      "hook_score": 100.0,
+      "slop_count": 0
+    },
+    {
+      "script_id": 4,
+      "title": "Copy Text From Any Image on Windows Instantly",
+      "composite_score": 86.2,
+      "passed": true,
+      "hook_score": 100.0,
+      "slop_count": 0
+    },
+    {
+      "script_id": 5,
+      "title": "NotebookLM AI: Turn PDFs Into Podcasts Instantly",
+      "composite_score": 88.5,
+      "passed": true,
+      "hook_score": 100.0,
+      "slop_count": 0
+    },
+    {
+      "script_id": 6,
+      "title": "Gamma AI: Generate Presentation Decks in 30 Seconds",
+      "composite_score": 88.5,
+      "passed": true,
+      "hook_score": 100.0,
+      "slop_count": 0
+    },
+    {
+      "script_id": 7,
+      "title": "Make cheap mics sound like studio quality for free",
+      "composite_score": 86.0,
+      "passed": true,
+      "hook_score": 90.0,
+      "slop_count": 0
+    },
+    {
+      "script_id": 8,
+      "title": "Stop Afternoon Coffee Crashes With This 10-Minute Reset",
+      "composite_score": 88.5,
+      "passed": true,
+      "hook_score": 100.0,
+      "slop_count": 0
+    },
+    {
+      "script_id": 9,
+      "title": "Stop Multitasking: The Hidden Cost Exposed",
+      "composite_score": 86.0,
+      "passed": true,
+      "hook_score": 90.0,
+      "slop_count": 0
+    },
+    {
+      "script_id": 10,
+      "title": "Focus Hack: Stop Phone Notifications",
+      "composite_score": 85.8,
+      "passed": true,
+      "hook_score": 90.0,
+      "slop_count": 0
+    }
+  ]
+}
