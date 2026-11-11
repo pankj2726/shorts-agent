@@ -57,6 +57,9 @@ GEMINI_MODEL = "gemini-flash-lite-latest"       # free tier Flash (high reliabil
 GROQ_MODEL = "openai/gpt-oss-120b"              # 120B model on Groq
 GROQ_FAST_MODEL = "qwen/qwen3.8-27b"            # Fast Groq model
 OPENROUTER_MODEL = "meta-llama/llama-3.1-70b-instruct:free"
+OMNIROUTE_BASE_URL = os.environ.get("OMNIROUTE_BASE_URL", "http://localhost:20128/v1")
+OMNIROUTE_MODEL = "default"
+POLLINATIONS_MODEL = "openai/gpt-5.4-nano"
 
 _MAX_RETRIES = 3
 _BACKOFF_MIN = 2
@@ -76,8 +79,14 @@ def complete(
     max_tokens: int = 4096,
 ) -> str:
     """
-    Return a text completion. Tries Gemini → Groq → OpenRouter on 429/failure.
-    Raises LLMError only if all three fail.
+    Return a text completion. Tries:
+      1. Gemini (GEMINI_API_KEY)
+      2. OmniRoute Local (OMNIROUTE_API_KEY / port 20128)
+      3. Groq (GROQ_API_KEY)
+      4. OpenRouter :free (OPENROUTER_API_KEY)
+      5. DeepInfra (DEEPINFRA_API_KEY)
+      6. Pollinations AI (Zero-cost public free tier, no key required)
+    Raises LLMError only if all providers fail.
     """
     errors: list[str] = []
 
@@ -86,30 +95,53 @@ def complete(
         try:
             return _gemini(prompt, system, temperature, max_tokens)
         except _RateLimited as e:
-            logger.warning("llm: Gemini rate-limited (%s), falling back to Groq", e)
+            logger.warning("llm: Gemini rate-limited (%s), falling back", e)
             errors.append(f"Gemini: {e}")
         except Exception as e:
-            logger.warning("llm: Gemini failed (%s), falling back to Groq", e)
+            logger.warning("llm: Gemini failed (%s), falling back", e)
             errors.append(f"Gemini: {e}")
 
-    # 2. Groq
+    # 2. Local OmniRoute
+    if os.environ.get("OMNIROUTE_API_KEY"):
+        try:
+            return _omniroute(prompt, system, temperature, max_tokens)
+        except Exception as e:
+            logger.warning("llm: OmniRoute failed (%s), falling back", e)
+            errors.append(f"OmniRoute: {e}")
+
+    # 3. Groq
     if os.environ.get("GROQ_API_KEY"):
         try:
             return _groq(prompt, system, temperature, max_tokens)
         except _RateLimited as e:
-            logger.warning("llm: Groq rate-limited (%s), falling back to OpenRouter", e)
+            logger.warning("llm: Groq rate-limited (%s), falling back", e)
             errors.append(f"Groq: {e}")
         except Exception as e:
-            logger.warning("llm: Groq failed (%s), falling back to OpenRouter", e)
+            logger.warning("llm: Groq failed (%s), falling back", e)
             errors.append(f"Groq: {e}")
 
-    # 3. OpenRouter :free
+    # 4. OpenRouter :free
     if os.environ.get("OPENROUTER_API_KEY"):
         try:
             return _openrouter(prompt, system, temperature, max_tokens)
         except Exception as e:
-            logger.error("llm: OpenRouter failed: %s", e)
+            logger.warning("llm: OpenRouter failed (%s), falling back", e)
             errors.append(f"OpenRouter: {e}")
+
+    # 5. DeepInfra
+    if os.environ.get("DEEPINFRA_API_KEY"):
+        try:
+            return _deepinfra(prompt, system, temperature, max_tokens)
+        except Exception as e:
+            logger.warning("llm: DeepInfra failed (%s), falling back", e)
+            errors.append(f"DeepInfra: {e}")
+
+    # 6. Pollinations AI (Guaranteed 100% Free Public Tier Fallback)
+    try:
+        return _pollinations(prompt, system, temperature, max_tokens)
+    except Exception as e:
+        logger.error("llm: Pollinations AI failed: %s", e)
+        errors.append(f"Pollinations: {e}")
 
     raise LLMError("All LLM providers failed: " + "; ".join(errors))
 
@@ -128,10 +160,16 @@ def complete_json(
     providers = []
     if os.environ.get("GEMINI_API_KEY"):
         providers.append(("Gemini", _gemini))
+    if os.environ.get("OMNIROUTE_API_KEY"):
+        providers.append(("OmniRoute", _omniroute))
     if os.environ.get("GROQ_API_KEY"):
         providers.append(("Groq", _groq))
     if os.environ.get("OPENROUTER_API_KEY"):
         providers.append(("OpenRouter", _openrouter))
+    if os.environ.get("DEEPINFRA_API_KEY"):
+        providers.append(("DeepInfra", _deepinfra))
+    # Pollinations AI is always appended as zero-cost fallback
+    providers.append(("Pollinations", _pollinations))
 
     last_exc = None
     for name, provider_fn in providers:
@@ -282,3 +320,105 @@ def _openrouter(prompt: str, system: str | None, temperature: float, max_tokens:
         return resp.json()["choices"][0]["message"]["content"]
 
     return _call()
+
+
+def _omniroute(prompt: str, system: str | None, temperature: float, max_tokens: int) -> str:
+    key = os.environ.get("OMNIROUTE_API_KEY", "")
+    headers = {"Content-Type": "application/json"}
+    if key:
+        headers["Authorization"] = f"Bearer {key}"
+
+    messages = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    messages.append({"role": "user", "content": prompt})
+
+    url = f"{OMNIROUTE_BASE_URL.rstrip('/')}/chat/completions"
+    payload = {
+        "model": OMNIROUTE_MODEL,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+    }
+
+    @retry(
+        retry=retry_if_exception_type(requests.exceptions.RequestException),
+        stop=stop_after_attempt(_MAX_RETRIES),
+        wait=wait_exponential(multiplier=1, min=_BACKOFF_MIN, max=_BACKOFF_MAX),
+        reraise=True,
+    )
+    def _call() -> str:
+        resp = requests.post(url, headers=headers, json=payload, timeout=45)
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"]
+
+    return _call()
+
+
+def _deepinfra(prompt: str, system: str | None, temperature: float, max_tokens: int) -> str:
+    key = os.environ.get("DEEPINFRA_API_KEY", "")
+    messages = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    messages.append({"role": "user", "content": prompt})
+
+    url = "https://api.deepinfra.com/v1/openai/chat/completions"
+    payload = {
+        "model": "deepseek-ai/DeepSeek-V3.2",
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+    }
+
+    @retry(
+        retry=retry_if_exception_type(requests.exceptions.RequestException),
+        stop=stop_after_attempt(_MAX_RETRIES),
+        wait=wait_exponential(multiplier=1, min=_BACKOFF_MIN, max=_BACKOFF_MAX),
+        reraise=True,
+    )
+    def _call() -> str:
+        resp = requests.post(
+            url,
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json=payload,
+            timeout=45,
+        )
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"]
+
+    return _call()
+
+
+def _pollinations(prompt: str, system: str | None, temperature: float, max_tokens: int) -> str:
+    """
+    Public free tier generator via Pollinations AI. Zero key required, $0.00 cost.
+    """
+    url = "https://text.pollinations.ai/"
+    payload = {
+        "messages": [],
+        "model": POLLINATIONS_MODEL,
+        "seed": int(time.time()),
+        "jsonMode": False,
+    }
+    if system:
+        payload["messages"].append({"role": "system", "content": system})
+    payload["messages"].append({"role": "user", "content": prompt})
+
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "ShortsAgent-Pipeline/1.0",
+    }
+
+    @retry(
+        retry=retry_if_exception_type(requests.exceptions.RequestException),
+        stop=stop_after_attempt(_MAX_RETRIES),
+        wait=wait_exponential(multiplier=1, min=_BACKOFF_MIN, max=_BACKOFF_MAX),
+        reraise=True,
+    )
+    def _call() -> str:
+        resp = requests.post(url, headers=headers, json=payload, timeout=30)
+        resp.raise_for_status()
+        return resp.text.strip()
+
+    return _call()
+
