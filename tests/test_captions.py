@@ -167,38 +167,304 @@ def test_ass_timestamps_are_in_centisecond_format(tmp_path):
     assert "-->" not in text
 
 
-# ─── Validation ──────────────────────────────────────────────────────────────
+# ─── Caption validation ──────────────────────────────────────────────────────
 
-def test_validate_captions_accepts_a_well_formed_file(tmp_path):
-    vtt = tmp_path / "caps.vtt"
-    vtt.write_text(VTT)
-    result = captions.validate_captions(vtt, audio_duration_s=1.2)
-    assert result["passed"] is True
+def _vtt(tmp_path, body, name="caps.vtt"):
+    f = tmp_path / name
+    f.write_text(body, encoding="utf-8")
+    return f
 
 
-def test_validate_captions_does_not_actually_check_audio_sync(tmp_path):
+def test_valid_synchronized_captions_pass(tmp_path):
+    f = _vtt(tmp_path, VTT)                       # last cue ends at 1.10s
+    r = captions.validate_captions(f, audio_duration_s=1.2)
+    assert r["passed"] is True
+    assert r["sync_checked"] is True
+    assert r["cues"] == 3
+    assert r["last_cue_end_s"] == 1.1
+
+
+def test_caption_ending_within_tolerance_passes(tmp_path):
+    f = _vtt(tmp_path, VTT)                       # ends 1.10s
+    r = captions.validate_captions(f, audio_duration_s=1.0)   # 0.10s overrun
+    assert r["passed"] is True
+    assert r["sync_checked"] is True
+
+
+def test_caption_ending_exactly_at_tolerance_passes(tmp_path):
+    f = _vtt(tmp_path, VTT)
+    r = captions.validate_captions(f, audio_duration_s=0.10, tolerance_s=1.0)
+    assert r["passed"] is True
+
+
+def test_caption_extending_beyond_tolerance_fails(tmp_path):
+    f = _vtt(tmp_path, VTT)                       # ends 1.10s
+    r = captions.validate_captions(f, audio_duration_s=0.05)  # 1.05s overrun
+    assert r["passed"] is False
+    assert "past the end of the audio" in r["reason"]
+
+
+def test_the_documented_scenario_30s_audio_58s_captions_fails(tmp_path):
+    body = "WEBVTT\n\n00:00:01.000 --> 00:00:58.000\nstill talking\n"
+    r = captions.validate_captions(_vtt(tmp_path, body), audio_duration_s=30.0)
+    assert r["passed"] is False
+    assert "28.000s" in r["reason"]
+
+
+def test_negative_start_timestamp_fails(tmp_path):
+    body = "WEBVTT\n\n-00:00:01.000 --> 00:00:03.000\nnope\n"
+    r = captions.validate_captions(_vtt(tmp_path, body), audio_duration_s=5.0)
+    assert r["passed"] is False
+
+
+def test_end_before_start_fails(tmp_path):
+    body = "WEBVTT\n\n00:00:06.000 --> 00:00:03.000\nbackwards\n"
+    r = captions.validate_captions(_vtt(tmp_path, body), audio_duration_s=10.0)
+    assert r["passed"] is False
+    assert "ends at or before it starts" in r["reason"]
+
+
+def test_end_equal_to_start_fails(tmp_path):
+    body = "WEBVTT\n\n00:00:03.000 --> 00:00:03.000\nzero length\n"
+    r = captions.validate_captions(_vtt(tmp_path, body), audio_duration_s=10.0)
+    assert r["passed"] is False
+
+
+def test_malformed_timestamp_fails(tmp_path):
+    body = "WEBVTT\n\n00:00:01 --> 00:00:03.000\nno millis\n"
+    r = captions.validate_captions(_vtt(tmp_path, body), audio_duration_s=10.0)
+    assert r["passed"] is False
+    assert "malformed" in r["reason"]
+
+
+def test_malformed_timestamp_is_not_silently_read_as_zero(tmp_path):
     """
-    PINS A KNOWN GAP. The docstring promises "captions match the audio length",
-    but the implementation only checks existence and a 20-byte minimum, then
-    returns "Captions valid and in sync". Captions twice as long as the audio
-    pass validation. Asserted as current behaviour so a future fix is visible.
+    _parse_vtt_timestamp() returns 0 for a format it does not recognise, which
+    would make a broken cue look like a valid one at time zero. The validator
+    must reject it instead.
     """
-    vtt = tmp_path / "caps.vtt"
-    vtt.write_text(VTT)          # 1.1s of captions
-    result = captions.validate_captions(vtt, audio_duration_s=0.2)
-    assert result["passed"] is True, (
-        "validate_captions now checks duration sync - update this test"
+    body = "WEBVTT\n\nbanana --> 00:00:03.000\ngarbage\n"
+    r = captions.validate_captions(_vtt(tmp_path, body), audio_duration_s=10.0)
+    assert r["passed"] is False
+    assert r["cues"] == 0
+
+
+def test_out_of_order_cues_fail(tmp_path):
+    body = (
+        "WEBVTT\n\n"
+        "00:00:05.000 --> 00:00:06.000\nlater first\n\n"
+        "00:00:01.000 --> 00:00:02.000\nearlier second\n"
     )
+    r = captions.validate_captions(_vtt(tmp_path, body), audio_duration_s=10.0)
+    assert r["passed"] is False
+    assert "must not go backwards" in r["reason"]
 
 
-def test_validate_captions_flags_a_missing_file(tmp_path):
-    result = captions.validate_captions(tmp_path / "absent.vtt", audio_duration_s=1.0)
-    assert result["passed"] is False
-    assert "does not exist" in result["reason"]
+def test_legitimate_overlapping_cues_pass(tmp_path):
+    """Word-level kinetic captions overlap by design; overlap is not an error."""
+    body = (
+        "WEBVTT\n\n"
+        "00:00:01.000 --> 00:00:03.000\nHello everyone.\n\n"
+        "00:00:02.500 --> 00:00:04.000\nWelcome back.\n"
+    )
+    r = captions.validate_captions(_vtt(tmp_path, body), audio_duration_s=5.0)
+    assert r["passed"] is True
+    assert r["cues"] == 2
 
 
-def test_validate_captions_rejects_a_near_empty_file(tmp_path):
-    vtt = tmp_path / "caps.vtt"
-    vtt.write_text("tiny")
-    result = captions.validate_captions(vtt, audio_duration_s=1.0)
-    assert result["passed"] is False
+def test_empty_caption_file_fails(tmp_path):
+    r = captions.validate_captions(_vtt(tmp_path, ""), audio_duration_s=1.0)
+    assert r["passed"] is False
+    assert "empty" in r["reason"]
+
+
+def test_file_without_cues_fails(tmp_path):
+    r = captions.validate_captions(_vtt(tmp_path, "WEBVTT\n\n"), audio_duration_s=1.0)
+    assert r["passed"] is False
+    assert "no caption cues" in r["reason"]
+
+
+def test_missing_caption_file_fails(tmp_path):
+    r = captions.validate_captions(tmp_path / "absent.vtt", audio_duration_s=1.0)
+    assert r["passed"] is False
+    assert "does not exist" in r["reason"]
+
+
+def test_missing_webvtt_header_fails(tmp_path):
+    r = captions.validate_captions(
+        _vtt(tmp_path, "00:00:01.000 --> 00:00:02.000\nno header\n"),
+        audio_duration_s=5.0,
+    )
+    assert r["passed"] is False
+    assert "WebVTT header" in r["reason"]
+
+
+def test_missing_audio_duration_fails_when_sync_required(tmp_path):
+    r = captions.validate_captions(_vtt(tmp_path, VTT), audio_duration_s=None)
+    assert r["passed"] is False
+    assert r["sync_checked"] is False
+    assert "could not be checked" in r["reason"]
+
+
+def test_missing_audio_duration_is_reported_not_faked_when_sync_optional(tmp_path):
+    r = captions.validate_captions(
+        _vtt(tmp_path, VTT), audio_duration_s=None, require_sync=False
+    )
+    assert r["passed"] is True
+    assert r["sync_checked"] is False          # never claims it checked
+    assert "synchronization not checked" in r["reason"]
+
+
+def test_non_numeric_audio_duration_fails(tmp_path):
+    r = captions.validate_captions(_vtt(tmp_path, VTT), audio_duration_s="thirty")
+    assert r["passed"] is False
+
+
+def test_zero_or_negative_audio_duration_fails(tmp_path):
+    assert captions.validate_captions(_vtt(tmp_path, VTT), 0)["passed"] is False
+    assert captions.validate_captions(_vtt(tmp_path, VTT), -3.0)["passed"] is False
+
+
+def test_ass_file_is_refused_rather_than_falsely_passed(tmp_path):
+    r = captions.validate_captions(_vtt(tmp_path, "[Events]\n", "caps.ass"), 5.0)
+    assert r["passed"] is False
+    assert "WebVTT only" in r["reason"]
+
+
+def test_two_part_timestamp_without_hours_parses(tmp_path):
+    body = "WEBVTT\n\n00:01.000 --> 00:03.000\nshort form\n"
+    r = captions.validate_captions(_vtt(tmp_path, body), audio_duration_s=5.0)
+    assert r["passed"] is True
+    assert r["last_cue_end_s"] == 3.0
+
+
+def test_cue_with_position_settings_still_parses(tmp_path):
+    body = "WEBVTT\n\n00:00:01.000 --> 00:00:02.000 position:10% align:start\nhi\n"
+    r = captions.validate_captions(_vtt(tmp_path, body), audio_duration_s=5.0)
+    assert r["passed"] is True
+
+
+# ─── Rendering integration ───────────────────────────────────────────────────
+
+def _render_inputs(tmp_path, vtt_body, duration_s=1.2):
+    """Minimal stand-ins so render_short can be driven without ffmpeg."""
+    from agent.modules import render
+
+    video = tmp_path / "normalized.mp4"
+    video.write_bytes(b"\x00" * 32)
+    vtt = _vtt(tmp_path, vtt_body)
+    return render, video, vtt
+
+
+def test_invalid_captions_block_rendering(tmp_path, monkeypatch):
+    """The core requirement: bad captions must never reach ffmpeg."""
+    from agent.modules import render
+
+    calls = []
+    monkeypatch.setattr(
+        render, "_ffmpeg_burn_captions",
+        lambda *a, **k: calls.append(a) or None,
+    )
+    video = tmp_path / "normalized.mp4"
+    video.write_bytes(b"\x00" * 32)
+    out = tmp_path / "final.mp4"
+    bad = _vtt(tmp_path, "WEBVTT\n\n00:00:01.000 --> 00:00:58.000\nrunaway\n")
+
+    with pytest.raises(RuntimeError) as exc:
+        render._burn_or_export(video, str(bad), out, duration_s=1.2, video_id="v1")
+
+    assert "caption validation failed" in str(exc.value)
+    assert calls == [], "ffmpeg must not be invoked for invalid captions"
+    assert not out.exists()
+
+
+def test_valid_captions_reach_the_renderer(tmp_path, monkeypatch):
+    from agent.modules import render
+
+    calls = []
+    monkeypatch.setattr(
+        render, "_ffmpeg_burn_captions",
+        lambda v, p, o: calls.append((v, p, o)),
+    )
+    video = tmp_path / "normalized.mp4"
+    video.write_bytes(b"\x00" * 32)
+    out = tmp_path / "final.mp4"
+
+    render._burn_or_export(video, str(_vtt(tmp_path, VTT)), out,
+                           duration_s=1.2, video_id="v1")
+
+    assert len(calls) == 1
+
+
+def test_no_captions_requested_preserves_existing_behaviour(tmp_path, monkeypatch):
+    from agent.modules import render
+
+    monkeypatch.setattr(
+        render, "_ffmpeg_burn_captions",
+        lambda *a, **k: pytest.fail("must not burn captions when none requested"),
+    )
+    video = tmp_path / "normalized.mp4"
+    video.write_bytes(b"\x00" * 32)
+    out = tmp_path / "final.mp4"
+
+    render._burn_or_export(video, None, out, duration_s=1.2, video_id="v1")
+
+    assert out.exists()          # the copy-through path still works
+
+
+def test_requested_but_missing_caption_file_is_an_error(tmp_path):
+    """A caller that asked for subtitles must not get a silent no-caption video."""
+    from agent.modules import render
+
+    video = tmp_path / "normalized.mp4"
+    video.write_bytes(b"\x00" * 32)
+    out = tmp_path / "final.mp4"
+
+    with pytest.raises(RuntimeError) as exc:
+        render._burn_or_export(video, str(tmp_path / "absent.vtt"), out,
+                               duration_s=1.2, video_id="v1")
+    assert "does not exist" in str(exc.value)
+    assert not out.exists()
+
+
+def test_unknown_audio_duration_does_not_fabricate_a_sync_check(tmp_path, monkeypatch):
+    """
+    ffprobe failure makes tts report 0.0, and render's padding fallback turns
+    that into 30.0. Validating captions against that invented number would let
+    subtitles run far past the real audio and still pass.
+    """
+    from agent.modules import render
+
+    calls = []
+    monkeypatch.setattr(render, "_ffmpeg_burn_captions",
+                        lambda v, p, o: calls.append(p))
+    video = tmp_path / "normalized.mp4"
+    video.write_bytes(b"\x00" * 32)
+    out = tmp_path / "final.mp4"
+    # Captions end at 1.1s; the real audio is unknown.
+    vtt = _vtt(tmp_path, VTT)
+
+    render._burn_or_export(video, str(vtt), out, duration_s=0.0, video_id="v1")
+
+    assert len(calls) == 1, "render still proceeds on a probe failure"
+
+
+def test_captions_are_checked_against_real_audio_not_the_padding_fallback(tmp_path):
+    """
+    Regression for the defect the review found: with a 3s voiceover and a failed
+    probe, the padded 30.0 must not become the sync reference.
+    """
+    from agent.modules import captions as cap
+
+    long_captions = "WEBVTT\n\n00:00:01.000 --> 00:00:29.000\nruns on\n"
+    f = _vtt(tmp_path, long_captions)
+
+    # Against the real 3s audio this must fail.
+    real = cap.validate_captions(f, 3.0)
+    assert real["passed"] is False
+    assert real["sync_checked"] is True
+
+    # Against the fabricated 30.0 it would have passed - which is the bug.
+    fabricated = cap.validate_captions(f, 30.0)
+    assert fabricated["passed"] is True
+    assert fabricated["sync_checked"] is True
