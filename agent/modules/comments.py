@@ -21,12 +21,13 @@ import time
 from datetime import datetime, timezone
 
 from agent.modules import db, llm, quota
+from agent.modules.config import env_int
 from agent.modules.notify import notify
 
 logger = logging.getLogger(__name__)
 
 MAX_PER_RUN = 25
-MAX_PER_DAY = int(os.environ.get("MAX_REPLIES_PER_DAY", "50"))
+MAX_PER_DAY = env_int("MAX_REPLIES_PER_DAY", 50)
 REPLY_DELAY_S = 20
 DRAFT_DAYS = 14  # draft-only for first N days
 

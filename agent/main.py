@@ -16,6 +16,8 @@ import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 
+from agent.modules.config import env_bool, env_list, env_str
+
 def _load_env_file() -> None:
     candidates = [
         Path(r"C:\Secrets\shorts-agent.env"),
@@ -98,7 +100,7 @@ def run_pipeline() -> None:
         work_dir = Path(tempfile.mkdtemp(prefix=f"short_{video_id}_"))
 
         # 4. TTS voiceover
-        lang = os.environ.get("LANGUAGE", "en")
+        lang = env_str("LANGUAGE", "en")
         tts = generate_voiceover(script["script"], work_dir, language=lang, video_id=video_id)
 
         # 5. Stock assets
@@ -130,13 +132,13 @@ def run_pipeline() -> None:
         conn.close()
 
         # 7. Publish or send for manual review
-        approval_required = os.environ.get("APPROVAL_REQUIRED", "true").lower() == "true"
+        approval_required = env_bool("APPROVAL_REQUIRED", True)
         if approval_required:
             _wait_for_approval(video_id, render_info["video_path"], script)
 
         # Determine publish time (next scheduled slot)
         from agent.modules.publish import upload_short, send_for_manual_review
-        publish_times = os.environ.get("PUBLISH_TIMES", "13:00,19:00").split(",")
+        publish_times = env_list("PUBLISH_TIMES", ["13:00", "19:00"])
         # Simplified: schedule for tomorrow at first slot
         from datetime import date, timedelta
         tomorrow = (date.today() + timedelta(days=1)).isoformat()
@@ -269,7 +271,7 @@ def run_commands() -> None:
                 f"🟢 Status\n"
                 f"Quota: {qs['used']}u used / {qs['remaining']}u left\n"
                 f"Last run: {dict(last_run) if last_run else 'none'}\n"
-                f"PAUSE_PUBLISHING: {os.environ.get('PAUSE_PUBLISHING', 'false')}"
+                f"PAUSE_PUBLISHING: {str(env_bool('PAUSE_PUBLISHING', False)).lower()}"
             )
             notify("STATUS", status_text, level="info")
 

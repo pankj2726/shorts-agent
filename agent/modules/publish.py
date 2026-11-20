@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Optional
 
 from agent.modules import db, quota
+from agent.modules.config import env_bool, env_str
 from agent.modules.notify import notify
 
 logger = logging.getLogger(__name__)
@@ -52,7 +53,7 @@ def upload_short(
         return row["yt_video_id"]
 
     # Kill switch
-    if os.environ.get("PAUSE_PUBLISHING", "false").lower() == "true":
+    if env_bool("PAUSE_PUBLISHING", False):
         logger.info("publish: PAUSE_PUBLISHING=true — skipping upload")
         notify("UPLOAD_SKIP", "PAUSE_PUBLISHING is true — video not uploaded", level="warn")
         return None
@@ -70,8 +71,8 @@ def upload_short(
             "description": description[:5000],
             "tags": tags[:500],
             "categoryId": "22",  # People & Blogs — change per niche
-            "defaultLanguage": os.environ.get("LANGUAGE", "en"),
-            "defaultAudioLanguage": os.environ.get("LANGUAGE", "en"),
+            "defaultLanguage": env_str("LANGUAGE", "en"),
+            "defaultAudioLanguage": env_str("LANGUAGE", "en"),
         },
         "status": {
             "privacyStatus": "private",
