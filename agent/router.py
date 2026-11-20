@@ -548,6 +548,14 @@ _LLM_BACKENDS = {
     "openrouter": "_openrouter",
 }
 
+# Adapters implementing the uniform provider contract. Routing dispatches
+# through these; _LLM_BACKENDS is retained only for callers that still resolve
+# a backend by attribute name.
+def _adapters():
+    from agent.modules import providers
+
+    return providers.BY_NAME
+
 
 def _is_usable_completion(result: Any) -> tuple[bool, str]:
     """
@@ -592,16 +600,16 @@ def complete(
         p for p in ROUTING_TABLE.get(task, []) if p not in (decision.provider,)
     ]
 
+    adapters = _adapters()
     for provider in order:
-        backend_name = _LLM_BACKENDS.get(provider)
-        if backend_name is None:
+        if provider not in _LLM_BACKENDS:
             continue
-        backend = getattr(llm, backend_name, None)
-        if backend is None:
-            errors.append(f"{provider}: no backend")
+        adapter = adapters.get(provider)
+        if adapter is None:
+            errors.append(f"{provider}: no adapter")
             continue
         try:
-            result = backend(prompt, system, temperature, max_tokens)
+            result = adapter._call(prompt, system, temperature, max_tokens)
         except Exception as exc:  # noqa: BLE001 - provider errors are expected
             errors.append(f"{provider}: {type(exc).__name__}")
             record_request(provider, error=f"{type(exc).__name__}: {exc}"[:200])
