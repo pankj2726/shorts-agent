@@ -2,11 +2,6 @@ name: Smoke Test (Phase 1)
 
 on:
   workflow_dispatch:
-  # Temporary trigger: the sandbox GitHub token cannot call workflow_dispatch
-  # (HTTP 403), so a push to the session branch is used to start a run.
-  push:
-    branches:
-      - arena/409e32e7-shorts-agent
 
 env:
   TZ: Asia/Kolkata
