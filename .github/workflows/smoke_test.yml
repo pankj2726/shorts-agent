@@ -51,4 +51,17 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           GH_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: python scripts/smoke_test.py
+        run: |
+          set +e
+          python scripts/smoke_test.py 2>&1 | tee smoke.log
+          code=${PIPESTATUS[0]}
+          {
+            echo "Smoke test exit code: $code"
+            echo '```text'
+            cat smoke.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$code" -ne 0 ]; then
+            echo "::error::$(grep -E '❌|Smoke test FAILED' smoke.log | tr '\n' ' ')"
+          fi
+          exit "$code"
