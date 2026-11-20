@@ -367,6 +367,11 @@ def diagnose(database_url: str, schema: str = DEFAULT_SCHEMA) -> dict:
     try:
         counts = {}
         for table in tables:
+            # Names come from information_schema, not from a caller, but they
+            # are interpolated rather than bound, so allow-list them anyway.
+            if table not in EXPECTED_TABLES:
+                continue
+            # nosec B608 - `table` is restricted to EXPECTED_TABLES above
             row = conn.execute(f"SELECT count(*) FROM {schema}.{table}").fetchone()
             counts[table] = row[0]
         report["row_counts"] = counts
