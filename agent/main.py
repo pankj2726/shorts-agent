@@ -67,6 +67,7 @@ def run_pipeline() -> None:
     from agent.modules.assets import fetch_stock_clips, pick_music
     from agent.modules.render import render_short
     from agent.modules.qa import check_render
+    from agent.modules.publish import upload_short, send_for_manual_review
 
     import tempfile
     from pathlib import Path
@@ -92,20 +93,6 @@ def run_pipeline() -> None:
         script = run_script(idea)
         if not script:
             raise RuntimeError("Script generation failed both attempts")
-
-        # Anti-Slop Audit & Humanizer Gate
-        from agent.modules.anti_slop_killer import AntiSlopKiller
-        slop_killer = AntiSlopKiller()
-        slop_audit = slop_killer.audit_script(script["script"])
-        if not slop_audit["passed"]:
-            logger.info("pipeline: Slop cliches detected %s -> Humanizing script...", slop_audit["detected_cliches"])
-            script["script"] = slop_killer.clean_and_humanize(script["script"])
-
-        # 100-Point Viral Potential Evaluation
-        from agent.modules.viral_score import ViralScoreEngine
-        viral_engine = ViralScoreEngine()
-        v_score = viral_engine.evaluate(script["script"], script.get("title", ""))
-        logger.info("pipeline: Viral Potential Score = %s/100 (%s, Action: %s)", v_score["total_score"], v_score["decision"], v_score["action"])
 
         video_id = script["video_id"]
         work_dir = Path(tempfile.mkdtemp(prefix=f"short_{video_id}_"))
@@ -142,37 +129,44 @@ def run_pipeline() -> None:
         conn.commit()
         conn.close()
 
-        # 7. Finalize & Deliver Media (Local Storage & Operator Push)
+        # 7. Publish or send for manual review
         approval_required = os.environ.get("APPROVAL_REQUIRED", "true").lower() == "true"
         if approval_required:
             _wait_for_approval(video_id, render_info["video_path"], script)
 
-        # In decoupled AI Router / Media Studio mode, video is saved locally and delivered directly
-        media_id = f"local_{video_id}"
-        notify(
-            "VIDEO_READY",
-            f"🎬 <b>Autonomous Video Generation Complete</b>\n"
-            f"Title: <b>{script['title']}</b>\n"
-            f"Path: <code>{render_info['video_path']}</code>\n"
-            f"Available for local export and Gateway API consumption.",
-            level="success",
+        # Determine publish time (next scheduled slot)
+        from agent.modules.publish import upload_short, send_for_manual_review
+        publish_times = os.environ.get("PUBLISH_TIMES", "13:00,19:00").split(",")
+        # Simplified: schedule for tomorrow at first slot
+        from datetime import date, timedelta
+        tomorrow = (date.today() + timedelta(days=1)).isoformat()
+        publish_at = f"{tomorrow}T{publish_times[0].strip()}:00+05:30"  # IST
+
+        yt_id = upload_short(
+            video_id=video_id,
             video_path=render_info["video_path"],
+            title=script["title"],
+            description=script["description"],
+            tags=script.get("tags", []),
+            publish_at=publish_at,
+            contains_synthetic=bool(script.get("contains_synthetic")),
         )
 
-        # Update video record in DB
+        if not yt_id:
+            # Fallback: send to Telegram for manual scheduling
+            send_for_manual_review(
+                video_id, render_info["video_path"], script["title"], script
+            )
+
+        # Mark pipeline run done
         conn = db.get_conn()
         conn.execute(
-            "UPDATE videos SET yt_video_id=?, yt_status='rendered' WHERE id=?",
-            (media_id, video_id),
-        )
-        # Mark pipeline run done
-        conn.execute(
             "UPDATE runs SET status='done', finished_at=?, details=? WHERE id=?",
-            (datetime.now(timezone.utc).isoformat(), f"video_id={video_id} media_id={media_id} path={render_info['video_path']}", run_id),
+            (datetime.now(timezone.utc).isoformat(), f"video_id={video_id} yt_id={yt_id}", run_id),
         )
         conn.commit()
         conn.close()
-        logger.info("=== Pipeline complete: Video saved to %s ===", render_info["video_path"])
+        logger.info("=== Pipeline complete ===")
 
     except Exception as exc:
         tb = traceback.format_exc()
@@ -198,11 +192,11 @@ def _wait_for_approval(video_id: int, video_path: str, script: dict) -> None:
 
     notify(
         "RENDER_DONE",
-        f"🔔 Authorize Final Video Export?\nTitle: {script['title']}\nHook: {script['hook']}",
+        f"🔔 Approve to upload?\nTitle: {script['title']}\nHook: {script['hook']}",
         level="action",
         video_path=video_path,
         buttons=[[
-            ("✅ Confirm Export", f"approve:{video_id}"),
+            ("✅ Approve", f"approve:{video_id}"),
             ("❌ Reject", f"reject:{video_id}"),
             ("🔄 Regenerate", f"regen:{video_id}"),
         ]],
@@ -230,55 +224,62 @@ def _wait_for_approval(video_id: int, video_path: str, script: dict) -> None:
             elif data in (f"reject:{video_id}", f"regen:{video_id}"):
                 raise RuntimeError(f"Operator rejected/regenerated video_id={video_id}")
 
-    raise RuntimeError(f"Approval timeout for video_id={video_id} — not finalized")
+    raise RuntimeError(f"Approval timeout for video_id={video_id} — not published")
 
 
 def run_engage() -> None:
-    logger.info("Engage (social/comments) decommissioned during Universal AI Router pivot.")
-    print("Engage module decommissioned: System operating as Universal AI Router & Model Unlocker.")
+    from agent.modules.comments import run_engage as _engage
+    _engage()
 
 
 def run_analytics() -> None:
-    logger.info("Analytics (YouTube) decommissioned during Universal AI Router pivot.")
-    print("Analytics module decommissioned: System operating as Universal AI Router & Model Unlocker.")
+    report_type = os.environ.get("REPORT_TYPE", "daily")
+    if report_type == "weekly":
+        from agent.modules.analytics import run_weekly
+        run_weekly()
+    else:
+        from agent.modules.analytics import run_daily
+        run_daily()
 
 
 def run_commands() -> None:
-    """Handle all Shorts Forge operator commands with access control and audit logging (single pass)."""
-    from agent.modules.notify import poll_updates
-    from agent.modules.telegram_control import ShortsForgeCommandHandler
+    """Handle /status /pause /resume from Telegram."""
+    from agent.modules.notify import poll_updates, notify, answer_callback
 
-    handler = ShortsForgeCommandHandler()
+    allowed_chat = os.environ.get("TELEGRAM_CHAT_ID", "")
     updates = poll_updates(offset=0, timeout=0)  # non-blocking
-    logger.info("commands: Polled %d update(s) from Telegram", len(updates))
 
     for upd in updates:
-        res = handler.process_update(upd)
-        if res:
-            logger.info("commands: Handled Telegram update -> %s", res)
+        msg = upd.get("message", {})
+        chat_id = str(msg.get("chat", {}).get("id", ""))
+        if chat_id != allowed_chat:
+            continue
+        text = msg.get("text", "").strip().lower()
 
+        if text == "/status":
+            from agent.modules import quota as q
+            from agent.modules.db import get_conn
+            qs = q.daily_summary()
+            conn = get_conn()
+            last_run = conn.execute(
+                "SELECT run_type, status, started_at FROM runs ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+            conn.close()
+            status_text = (
+                f"🟢 Status\n"
+                f"Quota: {qs['used']}u used / {qs['remaining']}u left\n"
+                f"Last run: {dict(last_run) if last_run else 'none'}\n"
+                f"PAUSE_PUBLISHING: {os.environ.get('PAUSE_PUBLISHING', 'false')}"
+            )
+            notify("STATUS", status_text, level="info")
 
-def run_poll() -> None:
-    """Continuously long-poll Telegram for instant (<1s) command responses."""
-    from agent.modules.notify import poll_updates
-    from agent.modules.telegram_control import ShortsForgeCommandHandler
+        elif text == "/pause":
+            _set_repo_variable("PAUSE_PUBLISHING", "true")
+            notify("AUTO_PAUSE", "⏸ Publishing paused by operator command", level="warn")
 
-    handler = ShortsForgeCommandHandler()
-    logger.info("📡 Starting real-time Telegram polling daemon (<1s response)... Press Ctrl+C to stop.")
-    last_offset = 0
-
-    try:
-        while True:
-            updates = poll_updates(offset=last_offset, timeout=25)
-            for upd in updates:
-                upd_id = upd.get("update_id", 0)
-                if upd_id >= last_offset:
-                    last_offset = upd_id + 1
-                res = handler.process_update(upd)
-                if res:
-                    logger.info("poll: Handled Telegram update (%d) -> %s", upd_id, res)
-    except KeyboardInterrupt:
-        logger.info("poll: Telegram polling stopped by user.")
+        elif text == "/resume":
+            _set_repo_variable("PAUSE_PUBLISHING", "false")
+            notify("RESUMED", "▶️ Publishing resumed by operator command", level="success")
 
 
 def _set_repo_variable(name: str, value: str) -> None:
@@ -362,13 +363,14 @@ def run_smoke() -> None:
     except Exception as e:
         errors.append(f"ffmpeg: {e}")
 
-    # 5. Model Freedom & Capability Registry
+    # 5. YouTube read access
     try:
-        from agent.modules.capability_registry import UniversalCapabilityRegistry
-        unlocked = UniversalCapabilityRegistry.list_unlocked_models()
-        logger.info("smoke: Model Freedom Registry OK (%d unlocked models)", len(unlocked))
+        from agent.modules.research import get_public_youtube
+        svc = get_public_youtube()
+        resp = svc.videos().list(part="snippet", chart="mostPopular", regionCode="IN", maxResults=1).execute()
+        logger.info("smoke: YouTube API OK (%d items)", len(resp.get("items", [])))
     except Exception as e:
-        errors.append(f"CapabilityRegistry: {e}")
+        errors.append(f"YouTube: {e}")
 
     if errors:
         msg = "Smoke test FAILED:\n" + "\n".join(f"  ❌ {e}" for e in errors)
@@ -376,124 +378,26 @@ def run_smoke() -> None:
         _notify("PIPELINE_ONLINE", msg, level="error")
         sys.exit(1)
     else:
-        msg = "✅ All integrations OK: Gemini, Pexels, edge-tts, ffmpeg, Model Freedom Registry"
+        msg = "✅ All integrations OK: Gemini, Pexels, edge-tts, ffmpeg, YouTube"
         logger.info(msg)
         _notify("PIPELINE_ONLINE", msg, level="success")
 
 
-def run_orchestrated_pipeline() -> None:
-    """Runs coordinated multi-agent pipeline via Central Orchestrator."""
-    from agent.modules.orchestration import get_orchestrator
-    logger.info("=== Starting Coordinated Multi-Agent Pipeline ===")
-    orch = get_orchestrator()
-    result = orch.run_production_pipeline()
-    logger.info("Coordinated pipeline result: Task=%s Verdict=%s", result.get("task_id"), result.get("qa_verdict"))
-    print(f"Pipeline completed: {result.get('task_id')} (QA: {result.get('qa_verdict')})")
-
-
-def show_comms_log() -> None:
-    """Displays recent inter-agent communication records from logs/agent-comms.jsonl."""
-    from agent.modules.orchestration import MessageLogger
-    limit = 10
-    if len(sys.argv) > 2:
-        try:
-            limit = int(sys.argv[2])
-        except ValueError:
-            if sys.argv[2] == "--limit" and len(sys.argv) > 3:
-                limit = int(sys.argv[3])
-    logger_instance = MessageLogger()
-    messages = logger_instance.read_messages(limit=limit)
-    print(f"=== Agent Communications Log (Last {len(messages)} messages) ===")
-    if not messages:
-        print("No communication records found in logs/agent-comms.jsonl.")
-        return
-    for msg in messages:
-        print(f"[{msg.timestamp}] {msg.sender} -> {msg.recipient} | Action: {msg.action} | Task: {msg.task_id} | Conf: {msg.confidence}")
-
-
-def run_handshake() -> None:
-    """Runs Directive 6.1 provider handshake and secrets verification."""
-    from scripts.verify_provider_handshake import main as handshake_main
-    handshake_main()
-
-
-def run_gateway() -> None:
-    """Starts the unified local gateway & interactive cross-platform sessions hub."""
-    from agent.modules.gateway_server import run_server
-    port = 8080
-    if len(sys.argv) > 2:
-        try:
-            port = int(sys.argv[2])
-        except ValueError:
-            pass
-    run_server(port=port)
-
-
-def run_sessions_cli() -> None:
-    """CLI handler for managing and interacting with cross-platform sessions."""
-    from agent.modules.session_router import SessionRouter, import_legacy_unified_db
-    import_legacy_unified_db()
-    sr = SessionRouter()
-    args = sys.argv[2:]
-    action = args[0] if args else "list"
-
-    if action == "list":
-        plat = args[1] if len(args) > 1 else None
-        sessions = sr.list_sessions(platform=plat)
-        for s in sessions:
-            plats = ",".join(s["routed_platforms"])
-            print(f"{s['session_id']} | {s['title']} | origin={s['origin_platform']} active={s['active_platform']} ({s['active_model']}) | platforms=[{plats}] | msgs={s['message_count']}")
-    elif action == "show" and len(args) >= 2:
-        s = sr.get_session(args[1])
-        if not s:
-            print(f"Session not found: {args[1]}")
-            sys.exit(1)
-        print(f"=== {s['title']} ({s['session_id']}) | visible_on={s['visible_on_platforms']} ===")
-        for m in s["messages"]:
-            print(f"[{m['platform']} / {m['model']}] {m['role'].upper()}: {m['content']}")
-    elif action == "route" and len(args) >= 3:
-        sid, plat = args[1], args[2]
-        mdl = args[3] if len(args) > 3 else None
-        res = sr.route_session(sid, target_platform=plat, target_model=mdl)
-        print(f"Routed {sid} -> {res['routed_to']} ({res['model']})")
-    elif action == "send" and len(args) >= 3:
-        sid = args[1]
-        prompt = " ".join(args[2:])
-        res = sr.interact(sid, prompt=prompt)
-        print(f"[{res['provider']} / {res['model']}] {res['reply']}")
-    elif action == "export" and len(args) >= 2:
-        import json
-        sid = args[1]
-        plat = args[2] if len(args) > 2 else "chatgpt"
-        print(json.dumps(sr.export_session(sid, target_platform=plat), indent=2))
-    elif action == "delete" and len(args) >= 2:
-        ok = sr.delete_session(args[1])
-        print("Deleted" if ok else "Not found")
-    else:
-        print("Usage: python -m agent.main sessions [list [platform]|show <id>|route <id> <platform> [model]|send <id> <prompt>|export <id> [platform]|delete <id>]")
-
-
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python -m agent.main [pipeline|orchestrate|engage|analytics|commands|smoke|comms|handshake|gateway|sessions]")
+        print("Usage: python -m agent.main [pipeline|engage|analytics|commands|smoke]")
         sys.exit(1)
 
     cmd = sys.argv[1]
     dispatch = {
         "pipeline": run_pipeline,
-        "orchestrate": run_orchestrated_pipeline,
         "engage": run_engage,
         "analytics": run_analytics,
         "commands": run_commands,
-        "poll": run_poll,
         "smoke": run_smoke,
-        "comms": show_comms_log,
-        "handshake": run_handshake,
-        "gateway": run_gateway,
-        "sessions": run_sessions_cli,
     }
     fn = dispatch.get(cmd)
     if not fn:
         print(f"Unknown command: {cmd}")
         sys.exit(1)
-    fn()
+    fn()
