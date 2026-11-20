@@ -68,12 +68,8 @@ def render_short(
     _ffmpeg_normalize(raw_video, music, normalized)
 
     # Step 5: Burn captions
-    vtt_path = tts_data.get("vtt_path")
-    if vtt_path and Path(vtt_path).exists():
-        _ffmpeg_burn_captions(normalized, vtt_path, out_path)
-    else:
-        # No VTT — just copy
-        normalized.rename(out_path)
+    _burn_or_export(normalized, tts_data.get("vtt_path"), out_path,
+                    duration_s=duration_s, video_id=video_id)
 
     # Step 6: Clean up intermediates
     for tmp in [raw_video, normalized, concat_file]:
@@ -149,6 +145,52 @@ def _ffmpeg_normalize(video: Path, music: Optional[dict], out: Path) -> None:
             str(out),
         ]
     _run_ffmpeg(cmd)
+
+
+def _burn_or_export(
+    normalized: Path,
+    vtt_path: Optional[str],
+    out_path: Path,
+    duration_s: float,
+    video_id: str,
+) -> None:
+    """
+    Validate captions, then burn them in — or export without them.
+
+    A caption file is checked before ffmpeg ever sees it. Captions that run past
+    the end of the voiceover produce a video that keeps talking in text after
+    the audio has stopped, and nothing downstream catches that: qa.py checks
+    only that captions are present, never that they line up.
+
+    An explicitly supplied path that does not exist is an error rather than a
+    silent no-caption render — the caller asked for subtitles. A render that
+    never requested captions keeps the previous copy-through behaviour.
+
+    Raises RuntimeError when captions were requested but cannot be used.
+    """
+    if not vtt_path:
+        normalized.rename(out_path)
+        return
+
+    from agent.modules import captions
+
+    if not Path(vtt_path).exists():
+        raise RuntimeError(
+            f"render: caption file was requested but does not exist: {vtt_path}"
+        )
+
+    check = captions.validate_captions(vtt_path, duration_s)
+    if not check["passed"]:
+        raise RuntimeError(
+            "render: caption validation failed, refusing to burn subtitles into "
+            f"video_id={video_id}: {check['reason']}"
+        )
+
+    logger.info(
+        "render: captions validated (%s cues, last at %ss, audio %ss)",
+        check["cues"], check["last_cue_end_s"], duration_s,
+    )
+    _ffmpeg_burn_captions(normalized, vtt_path, out_path)
 
 
 def _ffmpeg_burn_captions(video: Path, vtt_path: str, out: Path) -> None:

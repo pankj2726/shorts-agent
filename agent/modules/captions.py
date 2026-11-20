@@ -6,11 +6,12 @@ Capabilities:
   2. Fallback transcription via Groq free whisper-large-v3 API (2,000 req/day free).
   3. Caption sync validation for QA gates.
 """
+import itertools
 import logging
 import os
 import re
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import requests
 
@@ -161,16 +162,220 @@ def transcribe_audio_groq(audio_path: Path | str) -> list[dict[str, Any]]:
             return []
 
 
-def validate_captions(vtt_or_ass_path: Path | str, audio_duration_s: float) -> dict[str, Any]:
+VTT_SYNC_TOLERANCE_S = 1.0
+"""
+How far past the end of the audio a caption may run and still pass.
+
+One second covers transcription boundary rounding and the fact that a final
+word's timestamp is often slightly long. Anything larger means the subtitles are
+talking after the voiceover has stopped.
+"""
+
+# HH:MM:SS.mmm or MM:SS.mmm (comma accepted as the decimal separator).
+_VTT_TS = re.compile(
+    r"^(?:(\d{1,3}):)?([0-5]?\d):([0-5]\d)[.,](\d{1,3})$"
+)
+_CUE_LINE = "-->"
+
+
+def _parse_timestamp_strict(ts: str) -> int:
     """
-    Validate that captions match the audio length and have valid syntax.
+    Parse one WebVTT timestamp into milliseconds.
+
+    Raises ValueError on anything malformed. This is deliberately stricter than
+    _parse_vtt_timestamp(), which returns 0 for a format it does not recognise —
+    a silent 0 would make a broken cue look like a valid one at time zero.
     """
+    m = _VTT_TS.match(ts.strip())
+    if not m:
+        raise ValueError(f"malformed timestamp {ts!r}")
+    hours, minutes, seconds, frac = m.groups()
+    ms = int(frac.ljust(3, "0")[:3])
+    total = int(minutes) * 60_000 + int(seconds) * 1_000 + ms
+    if hours:
+        total += int(hours) * 3_600_000
+    return total
+
+
+def parse_cues(text: str) -> tuple[list[dict[str, Any]], list[str]]:
+    """
+    Extract cues from WebVTT text.
+
+    Returns (cues, errors). Each cue is {start_ms, end_ms, text}. Parsing
+    problems are collected rather than raised so one bad cue does not hide the
+    others from the report.
+    """
+    cues: list[dict[str, Any]] = []
+    errors: list[str] = []
+    lines = text.splitlines()
+
+    for idx, line in enumerate(lines, start=1):
+        if _CUE_LINE not in line:
+            continue
+        left, _, right = line.partition(_CUE_LINE)
+        # A cue line may carry position/alignment settings after the end time.
+        end_part = right.strip().split(" ", 1)[0]
+        try:
+            start_ms = _parse_timestamp_strict(left)
+            end_ms = _parse_timestamp_strict(end_part)
+        except ValueError as exc:
+            errors.append(f"line {idx}: {exc}")
+            continue
+        # The text is whatever follows, up to the next blank line.
+        body: list[str] = []
+        for following in lines[idx:]:
+            if not following.strip():
+                break
+            body.append(following.strip())
+        cues.append({
+            "line": idx,
+            "start_ms": start_ms,
+            "end_ms": end_ms,
+            "text": " ".join(body),
+        })
+    return cues, errors
+
+
+def validate_captions(
+    vtt_or_ass_path: Path | str,
+    audio_duration_s: float | None,
+    tolerance_s: float = VTT_SYNC_TOLERANCE_S,
+    require_sync: bool = True,
+) -> dict[str, Any]:
+    """
+    Validate a WebVTT caption file against the audio it belongs to.
+
+    Checks structure, every cue's timestamps, cue ordering, and whether the last
+    cue runs past the end of the audio by more than `tolerance_s`.
+
+    Overlapping cues are permitted: word-level kinetic captions overlap by
+    design, and overlap is a styling choice rather than a correctness error.
+    Ordering is still enforced on cue start times, so a cue that begins before
+    its predecessor is reported.
+
+    The result always reports whether synchronization was actually checked.
+    It never claims captions are in sync when the audio duration was unknown —
+    the previous implementation returned "Captions valid and in sync" after
+    checking only that the file existed and exceeded 20 bytes.
+
+    Returns {passed, reason, sync_checked, cues, last_cue_end_s,
+             audio_duration_s, tolerance_s}.
+    """
+    result: dict[str, Any] = {
+        "passed": False,
+        "reason": "",
+        "sync_checked": False,
+        "cues": 0,
+        "last_cue_end_s": None,
+        "audio_duration_s": audio_duration_s,
+        "tolerance_s": tolerance_s,
+    }
+
     path = Path(vtt_or_ass_path)
+    if path.suffix.lower() == ".ass":
+        result["reason"] = (
+            "sync validation is implemented for WebVTT only; an ASS file cannot "
+            "be validated here - validate the source VTT before converting"
+        )
+        return result
+
     if not path.exists():
-        return {"passed": False, "reason": f"Caption file does not exist: {path}"}
+        result["reason"] = f"caption file does not exist: {path}"
+        return result
 
-    size = path.stat().st_size
-    if size < 20:
-        return {"passed": False, "reason": "Caption file is nearly empty"}
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        result["reason"] = f"caption file is not readable: {type(exc).__name__}: {exc}"
+        return result
 
-    return {"passed": True, "reason": "Captions valid and in sync"}
+    if not text.strip():
+        result["reason"] = "caption file is empty"
+        return result
+
+    # The header may be followed by a note or settings on the same line.
+    first = text.lstrip("\ufeff").splitlines()[0].strip()
+    if not first.startswith("WEBVTT"):
+        result["reason"] = (
+            f"missing WebVTT header (first line is {first[:40]!r})"
+        )
+        return result
+
+    cues, parse_errors = parse_cues(text)
+    result["cues"] = len(cues)
+
+    if parse_errors:
+        result["reason"] = f"malformed cue timestamp(s): {'; '.join(parse_errors[:3])}"
+        return result
+
+    if not cues:
+        result["reason"] = "no caption cues found in file"
+        return result
+
+    for cue in cues:
+        if cue["start_ms"] < 0:
+            result["reason"] = (
+                f"cue at line {cue['line']} starts before zero "
+                f"({cue['start_ms']}ms)"
+            )
+            return result
+        if cue["end_ms"] <= cue["start_ms"]:
+            result["reason"] = (
+                f"cue at line {cue['line']} ends at or before it starts "
+                f"({cue['start_ms']}ms -> {cue['end_ms']}ms)"
+            )
+            return result
+
+    for prev, cur in itertools.pairwise(cues):
+        if cur["start_ms"] < prev["start_ms"]:
+            result["reason"] = (
+                f"cue at line {cur['line']} starts before the previous cue "
+                f"({cur['start_ms']}ms < {prev['start_ms']}ms); overlapping is "
+                "allowed but cues must not go backwards"
+            )
+            return result
+
+    last_end_s = cues[-1]["end_ms"] / 1000.0
+    result["last_cue_end_s"] = round(last_end_s, 3)
+
+    if audio_duration_s is None:
+        if require_sync:
+            result["reason"] = (
+                "audio duration is unknown, so synchronization could not be "
+                f"checked (last caption ends at {last_end_s:.3f}s)"
+            )
+            return result
+        result["passed"] = True
+        result["reason"] = (
+            "captions are structurally valid; synchronization not checked "
+            "(audio duration unavailable)"
+        )
+        return result
+
+    try:
+        duration = float(audio_duration_s)
+    except (TypeError, ValueError):
+        result["reason"] = f"audio duration is not a number: {audio_duration_s!r}"
+        return result
+
+    if duration <= 0:
+        result["reason"] = f"audio duration is not positive: {duration}"
+        return result
+
+    result["sync_checked"] = True
+    overrun = last_end_s - duration
+    if overrun > tolerance_s:
+        result["reason"] = (
+            f"captions run {overrun:.3f}s past the end of the audio "
+            f"(last caption {last_end_s:.3f}s, audio {duration:.3f}s, "
+            f"tolerance {tolerance_s:.3f}s)"
+        )
+        return result
+
+    result["passed"] = True
+    result["reason"] = (
+        f"{len(cues)} cue(s) valid and synchronized "
+        f"(last caption {last_end_s:.3f}s, audio {duration:.3f}s, "
+        f"tolerance {tolerance_s:.3f}s)"
+    )
+    return result
