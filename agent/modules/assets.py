@@ -5,8 +5,8 @@ License log: every asset is recorded in the DB assets table.
 """
 import logging
 import os
-import time
 import random
+import time
 from pathlib import Path
 from typing import Optional
 

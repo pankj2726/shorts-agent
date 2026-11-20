@@ -37,8 +37,7 @@ class _FakeResponse:
             raise RuntimeError(f"HTTP {self.status_code}")
 
     def iter_content(self, chunk_size=65536):
-        for c in self._chunks:
-            yield c
+        yield from self._chunks
 
 
 @pytest.fixture
