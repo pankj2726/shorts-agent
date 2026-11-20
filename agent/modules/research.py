@@ -14,6 +14,7 @@ from typing import Any
 import requests
 
 from agent.modules import quota, db
+from agent.modules.config import env_str
 from agent.modules.notify import notify
 
 logger = logging.getLogger(__name__)
@@ -172,7 +173,7 @@ def run_research() -> dict:
     Returns a dict with keys: trending, competitor_topics, trend_queries.
     """
     notify("RESEARCH_START", "Fetching trends and competitor data", level="info")
-    niche = os.environ.get("CHANNEL_NICHE", "productivity")
+    niche = env_str("CHANNEL_NICHE", "productivity")
 
     trending = fetch_trending()
     trend_queries = fetch_pytrends(niche)
