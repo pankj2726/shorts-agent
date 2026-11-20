@@ -2,9 +2,6 @@ name: Smoke Test (Phase 1)
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - arena/409e32e7-shorts-agent
 
 env:
   TZ: Asia/Kolkata
