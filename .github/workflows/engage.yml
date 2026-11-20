@@ -30,9 +30,15 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Unpack ENV_FILE if provided
-        if: "${{ secrets.ENV_FILE != '' }}"
+        env:
+          ENV_FILE_CONTENT: ${{ secrets.ENV_FILE }}
         run: |
-          echo "${{ secrets.ENV_FILE }}" > .env
+          if [ -n "$ENV_FILE_CONTENT" ]; then
+            printf '%s\n' "$ENV_FILE_CONTENT" > .env
+            echo ".env written from ENV_FILE secret."
+          else
+            echo "::warning::secret ENV_FILE is empty; continuing without .env"
+          fi
 
       - name: Restore state DB
         uses: actions/cache@v4
