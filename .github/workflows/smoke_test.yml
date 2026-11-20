@@ -32,9 +32,10 @@ jobs:
       - name: Install Python deps
         run: pip install -r requirements.txt
 
-      - name: Unpack ENV_FILE if provided
-        if: "${{ secrets.ENV_FILE != '' }}"
-        run: printf '%s' "${{ secrets.ENV_FILE }}" > .env
+      - name: Write ENV_FILE (empty when not configured)
+        env:
+          ENV_FILE_CONTENT: ${{ secrets.ENV_FILE }}
+        run: printf '%s' "$ENV_FILE_CONTENT" > .env
 
       - name: Run Phase 1 smoke test
         env:
