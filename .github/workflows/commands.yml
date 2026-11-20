@@ -5,6 +5,11 @@ on:
     # Poll every 10 minutes for /status /pause /resume
     - cron: '*/10 * * * *'
   workflow_dispatch:
+  # TEMPORARY: the automation token cannot dispatch (HTTP 403), so this verifies
+  # the patched ENV_FILE step actually runs. Removed again after the check.
+  push:
+    branches:
+      - arena/409e32e7-shorts-agent
 
 env:
   TZ: Asia/Kolkata
