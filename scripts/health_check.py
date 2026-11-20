@@ -40,6 +40,8 @@ if str(PROJECT_ROOT) not in sys.path:
 
 import requests
 
+from agent.modules.config import load_env_file
+
 logger = logging.getLogger("health_check")
 
 REGISTRY_PATH = PROJECT_ROOT / "agents" / "agent-4-providers" / "registry" / "providers.json"
@@ -209,6 +211,14 @@ def run(dry_run: bool = False, strict: bool = False) -> int:
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s"
     )
+
+    # Credentials arrive via the ENV_FILE secret, which the workflow writes to
+    # .env. Individual secrets such as GEMINI_API_KEY are usually empty, so
+    # without this the keyed probes report "not configured" even though the key
+    # is present. Existing environment values still take precedence.
+    loaded = load_env_file()
+    if loaded is not None:
+        logger.info("loaded environment from %s", loaded)
 
     try:
         with open(REGISTRY_PATH, "r", encoding="utf-8") as fh:

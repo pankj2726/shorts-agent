@@ -13,31 +13,13 @@ import json
 import logging
 import os
 import time
-from pathlib import Path
 from typing import Any
 
 def _load_env_file() -> None:
-    candidates = [
-        Path(r"C:\Secrets\shorts-agent.env"),
-        Path(r"C:\Secrets\.env"),
-        Path(__file__).parent.parent.parent / ".env",
-        Path(".env"),
-    ]
-    for candidate in candidates:
-        if candidate.exists():
-            try:
-                with open(candidate, "r", encoding="utf-8") as f:
-                    for line in f:
-                        line = line.strip()
-                        if not line or line.startswith("#") or "=" not in line:
-                            continue
-                        k, v = line.split("=", 1)
-                        k, v = k.strip(), v.strip().strip('"').strip("'")
-                        if k and not os.environ.get(k):
-                            os.environ[k] = v
-            except Exception:
-                pass
-            break
+    """Populate os.environ from the project .env. Delegates to config."""
+    from agent.modules.config import load_env_file
+
+    load_env_file()
 
 _load_env_file()
 
