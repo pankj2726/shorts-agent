@@ -9,8 +9,6 @@ requests.post is mocked. No audio is sent anywhere and no Groq call is made.
 """
 from __future__ import annotations
 
-import json
-
 import pytest
 
 from agent.modules import captions
