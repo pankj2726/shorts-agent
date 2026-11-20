@@ -26,7 +26,7 @@
     "privacy_note": "Free-tier content may be used by Google to improve models — verify before uploading user data",
     "health": "ok",
     "fallback_model": null,
-    "last_verified": "2026-11-10",
+    "last_verified": "2026-11-20",
     "known_limitations": [
       "Free-tier data may be used for model training",
       "Rate limits model-specific — check account dashboard"
@@ -102,7 +102,7 @@
     "privacy_policy_reviewed": false,
     "health": "ok",
     "fallback_model": null,
-    "last_verified": "2026-11-10",
+    "last_verified": "2026-11-20",
     "known_limitations": [
       "llama-3.1-70b-versatile deprecated — do not use",
       "Rate limits are account-specific, not plan-generic"
