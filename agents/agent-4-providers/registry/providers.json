@@ -6,7 +6,9 @@
     "models": [
       {
         "model_id": "gemini-flash-lite-latest",
-        "modality": ["text"],
+        "modality": [
+          "text"
+        ],
         "context_tokens": null,
         "notes": "Active and confirmed working as of 2026-11-10"
       }
@@ -38,13 +40,17 @@
     "models": [
       {
         "model_id": "openai/gpt-oss-120b",
-        "modality": ["text"],
+        "modality": [
+          "text"
+        ],
         "context_tokens": null,
         "notes": "Active Groq-hosted model"
       },
       {
         "model_id": "qwen/qwen3.8-27b",
-        "modality": ["text"],
+        "modality": [
+          "text"
+        ],
         "context_tokens": null,
         "notes": "Active as of last test"
       }
@@ -62,7 +68,7 @@
     "privacy_policy_reviewed": false,
     "health": "ok",
     "fallback_model": null,
-    "last_verified": "2026-11-10",
+    "last_verified": "2026-11-20",
     "known_limitations": [
       "50 requests/day hard cap on free tier",
       "Model availability changes frequently"
@@ -76,7 +82,9 @@
     "models": [
       {
         "model_id": "whisper-large-v3",
-        "modality": ["audio-to-text"],
+        "modality": [
+          "audio-to-text"
+        ],
         "context_tokens": null,
         "notes": "Speech recognition; word-level timestamps"
       }
@@ -134,7 +142,9 @@
     "models": [
       {
         "model_id": "flux",
-        "modality": ["text-to-image"],
+        "modality": [
+          "text-to-image"
+        ],
         "context_tokens": null,
         "notes": "Free HTTP API; rate limited — observed 402 on burst requests"
       }
@@ -148,9 +158,9 @@
     "pricing_verified": false,
     "commercial_use_verified": false,
     "privacy_policy_reviewed": false,
-    "health": "degraded",
+    "health": "ok",
     "fallback_model": "procedural-gradient-local",
-    "last_verified": "2026-11-10",
+    "last_verified": "2026-11-20",
     "known_limitations": [
       "402 errors on burst requests (3 of 4 keywords failed in Phase 3 test)",
       "No guaranteed SLA",
@@ -165,7 +175,9 @@
     "models": [
       {
         "model_id": "en-IN-NeerjaNeural",
-        "modality": ["text-to-speech"],
+        "modality": [
+          "text-to-speech"
+        ],
         "context_tokens": null,
         "notes": "Indian English neural TTS; active and working as of 2026-11-10"
       }
@@ -179,7 +191,7 @@
     "privacy_policy_reviewed": false,
     "health": "ok",
     "fallback_model": "pyttsx3-local",
-    "last_verified": "2026-11-10",
+    "last_verified": "2026-11-20",
     "known_limitations": [
       "API changed: use boundary=WordBoundary + sub_maker.feed() + get_srt()",
       "pyttsx3 fallback produces very quiet audio (-17.5 LUFS) — neural preferred"
@@ -193,13 +205,18 @@
     "models": [
       {
         "model_id": "ace-step-1.5",
-        "modality": ["text-to-music", "audio-editing"],
+        "modality": [
+          "text-to-music",
+          "audio-editing"
+        ],
         "context_tokens": null,
         "notes": "Local inference; <4GB VRAM (project claim — verify empirically)"
       }
     ],
     "access_type": "open_source",
-    "quota": {"note": "Local inference — unlimited if hardware permits"},
+    "quota": {
+      "note": "Local inference — unlimited if hardware permits"
+    },
     "pricing_verified": true,
     "commercial_use_verified": false,
     "commercial_use_note": "Code: MIT license. Model weights: verify separately before commercial use",
@@ -221,13 +238,17 @@
     "models": [
       {
         "model_id": "whisperx-large-v3",
-        "modality": ["audio-to-text"],
+        "modality": [
+          "audio-to-text"
+        ],
         "context_tokens": null,
         "notes": "Word-level timestamps, speaker diarization; local inference"
       }
     ],
     "access_type": "open_source",
-    "quota": {"note": "Local inference — unlimited"},
+    "quota": {
+      "note": "Local inference — unlimited"
+    },
     "pricing_verified": true,
     "commercial_use_verified": false,
     "privacy_policy_reviewed": true,
@@ -247,13 +268,18 @@
     "models": [
       {
         "model_id": "wan-2.1-1.3b",
-        "modality": ["text-to-video", "image-to-video"],
+        "modality": [
+          "text-to-video",
+          "image-to-video"
+        ],
         "context_tokens": null,
         "notes": "1.3B model; ~8.19GB VRAM (project claim); local inference"
       }
     ],
     "access_type": "open_source",
-    "quota": {"note": "Local inference; VRAM-bound"},
+    "quota": {
+      "note": "Local inference; VRAM-bound"
+    },
     "pricing_verified": false,
     "commercial_use_verified": false,
     "commercial_use_note": "License must be verified before commercial deployment",

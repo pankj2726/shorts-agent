@@ -1,0 +1,79 @@
+{
+  "generated_at": "2026-11-20T12:51:49+00:00",
+  "dry_run": false,
+  "probe_timeout_s": 15,
+  "results": [
+    {
+      "probed": false,
+      "health": null,
+      "reason": "GEMINI_API_KEY not configured",
+      "endpoint": "https://generativelanguage.googleapis.com/v1beta/models",
+      "provider": "google-gemini",
+      "previous_health": "ok"
+    },
+    {
+      "probed": true,
+      "health": "ok",
+      "status_code": 200,
+      "reason": "",
+      "endpoint": "https://openrouter.ai/api/v1/models",
+      "latency_ms": 72,
+      "provider": "openrouter",
+      "previous_health": "ok"
+    },
+    {
+      "probed": false,
+      "health": null,
+      "reason": "GROQ_API_KEY not configured",
+      "endpoint": "https://api.groq.com/openai/v1/models",
+      "provider": "groq",
+      "previous_health": "ok"
+    },
+    {
+      "provider": "cerebras",
+      "probed": false,
+      "health": "unknown",
+      "reason": "integration_status=not_started"
+    },
+    {
+      "probed": true,
+      "health": "ok",
+      "status_code": 200,
+      "reason": "",
+      "endpoint": "https://pollinations.ai/",
+      "latency_ms": 84,
+      "provider": "pollinations-ai",
+      "previous_health": "degraded"
+    },
+    {
+      "probed": true,
+      "health": "ok",
+      "reason": "",
+      "voices": 318,
+      "latency_ms": 965,
+      "provider": "edge-tts",
+      "previous_health": "ok"
+    },
+    {
+      "provider": "ace-step",
+      "probed": false,
+      "health": "unknown",
+      "reason": "integration_status=not_started"
+    },
+    {
+      "provider": "whisperx",
+      "probed": false,
+      "health": "unknown",
+      "reason": "integration_status=not_started"
+    },
+    {
+      "provider": "wan-video",
+      "probed": false,
+      "health": "unknown",
+      "reason": "integration_status=not_started"
+    }
+  ],
+  "transitions": [
+    "pollinations-ai: degraded -> ok"
+  ]
+}
