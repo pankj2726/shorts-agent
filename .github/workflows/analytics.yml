@@ -16,6 +16,10 @@ on:
 env:
   TZ: Asia/Kolkata
   PYTHONUNBUFFERED: "1"
+  # State store. DB_BACKEND defaults to sqlite when the variable is unset or
+  # blank; set it to 'postgres' plus the DATABASE_URL secret to switch.
+  DB_BACKEND: ${{ vars.DB_BACKEND }}
+  DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
 jobs:
   analytics:

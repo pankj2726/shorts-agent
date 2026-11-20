@@ -10,14 +10,43 @@ Tables:
   learnings    — weekly learning bullets
   runs         — pipeline run history
 """
+import os
 import sqlite3
 from pathlib import Path
 
 DB_PATH = Path(__file__).parent.parent / "state" / "db.sqlite"
 
 
-def get_conn() -> sqlite3.Connection:
-    """Return a connection with row_factory set to sqlite3.Row."""
+def backend() -> str:
+    """Which state store to use: 'sqlite' (default) or 'postgres'."""
+    return (os.environ.get("DB_BACKEND", "sqlite") or "sqlite").strip().lower()
+
+
+def postgres_url() -> str:
+    """Connection string for the postgres backend, if configured."""
+    return (os.environ.get("DATABASE_URL", "") or "").strip()
+
+
+def get_conn():
+    """
+    Return a state-store connection.
+
+    SQLite is the default and is unchanged. Set DB_BACKEND=postgres plus
+    DATABASE_URL to use the Supabase/PostgreSQL schema in agent/modules/db_pg.py;
+    the returned object exposes the same execute/commit/close/fetch surface, so
+    call sites do not branch on backend.
+    """
+    if backend() == "postgres":
+        url = postgres_url()
+        if not url:
+            raise RuntimeError(
+                "DB_BACKEND=postgres but DATABASE_URL is not set. Add it as a "
+                "repository secret, or unset DB_BACKEND to use SQLite."
+            )
+        from agent.modules import db_pg
+
+        return db_pg.connect(url)
+
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row

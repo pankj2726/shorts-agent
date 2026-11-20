@@ -47,7 +47,19 @@ UNIT_COSTS: dict[str, int] = {
 _DB_PATH = Path(__file__).parent.parent / "state" / "db.sqlite"
 
 
-def _get_conn() -> sqlite3.Connection:
+def _get_conn():
+    """
+    Quota ledger connection.
+
+    quota.py predates the shared db.get_conn() and opens SQLite directly. Under
+    the postgres backend it must go through db.get_conn() so the ledger lands in
+    the same store as everything else; the SQLite path is left byte-identical.
+    """
+    from agent.modules import db
+
+    if db.backend() == "postgres":
+        return db.get_conn()
+
     conn = sqlite3.connect(_DB_PATH)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS quota_log (
