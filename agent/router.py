@@ -56,9 +56,30 @@ ROUTING_TABLE: dict[str, list[str]] = {
     "speech_recognition": ["whisperx", "groq"],
     "voiceover": ["edge-tts", "pyttsx3-local"],
     "music_generation": ["ace-step", "cc0-music-library"],
-    "video_generation": ["wan-video", "pollinations-ai"],
+    # wan-video only. pollinations-ai was listed here as a fallback, but its sole
+    # model (flux) is text-to-image, so a video request silently resolved to a
+    # still frame and reported success. Better to raise RoutingError than to
+    # hand back the wrong medium.
+    "video_generation": ["wan-video"],
     "captions": ["edge-tts", "whisperx"],
     "rendering": ["ffmpeg-local"],
+}
+
+# Modality each task actually needs, matched against the `modality` list each
+# registry model declares. Checked by supports_task_modality(). An empty tuple
+# means "no constraint" — used for local tooling that declares no modality.
+TASK_MODALITY: dict[str, tuple[str, ...]] = {
+    "scriptwriting": ("text",),
+    "content_analysis": ("text",),
+    "image_generation": ("text-to-image", "image-to-image"),
+    "speech_recognition": ("audio-to-text",),
+    "voiceover": ("text-to-speech",),
+    "music_generation": ("text-to-music",),
+    "video_generation": ("text-to-video", "image-to-video"),
+    # Subtitles can be produced from audio or timed against speech, so either
+    # declared modality is acceptable here.
+    "captions": ("text-to-speech", "audio-to-text"),
+    "rendering": (),
 }
 
 # Providers that are local binaries/libraries rather than remote endpoints.
@@ -150,6 +171,46 @@ def is_eligible(provider: str, entry: Optional[dict] = None) -> tuple[bool, str]
     if not has_credential(provider):
         return False, "no credential configured"
     return True, "eligible"
+
+
+def provider_modalities(entry: Optional[dict]) -> set[str]:
+    """Every modality declared across a provider's models."""
+    if not entry:
+        return set()
+    declared: set[str] = set()
+    for model in entry.get("models") or []:
+        if isinstance(model, dict):
+            declared.update(model.get("modality") or [])
+    return declared
+
+
+def supports_task_modality(
+    task: str,
+    provider: str,
+    entry: Optional[dict] = None,
+) -> tuple[bool, str]:
+    """
+    Return (supports, reason) for whether `provider` can serve `task`.
+
+    Deliberately fail-open: local tooling has no registry entry, and some
+    registry entries predate the `modality` field, so an absence of declared
+    modalities is treated as "unknown, allow" rather than as a rejection.
+    Only an explicit mismatch blocks.
+    """
+    required = TASK_MODALITY.get(task)
+    if not required:
+        return True, ""
+    if provider in LOCAL_PROVIDERS or entry is None:
+        return True, ""
+    declared = provider_modalities(entry)
+    if not declared:
+        return True, ""
+    if declared & set(required):
+        return True, ""
+    return False, (
+        f"modality mismatch: declares {sorted(declared)}, "
+        f"{task} needs one of {list(required)}"
+    )
 
 
 # ─── Quota tracker ───────────────────────────────────────────────────────────
@@ -248,13 +309,25 @@ def record_request(
 
 # ─── Routing ─────────────────────────────────────────────────────────────────
 
-def _pick_model(entry: Optional[dict]) -> Optional[str]:
-    """First model id declared for a provider, or None."""
+def _pick_model(entry: Optional[dict], task: Optional[str] = None) -> Optional[str]:
+    """
+    Model id to report for a provider, preferring one that matches the task.
+
+    A provider can serve several tasks with different models (groq does text via
+    openai/gpt-oss-120b and transcription via whisper-large-v3), so reporting
+    models[0] unconditionally would mislabel half the decisions. Falls back to
+    the first model when nothing matches, preserving the old behaviour.
+    """
     if not entry:
         return None
     models = entry.get("models") or []
     if not models:
         return None
+    required = set(TASK_MODALITY.get(task or "", ()) or ())
+    if required:
+        for model in models:
+            if isinstance(model, dict) and set(model.get("modality") or []) & required:
+                return model.get("model_id")
     first = models[0]
     return first.get("model_id") if isinstance(first, dict) else None
 
@@ -281,6 +354,10 @@ def route(task: str, registry: Optional[list[dict]] = None) -> RouteDecision:
         if not ok:
             considered.append({"provider": provider, "skipped": why})
             continue
+        ok, why = supports_task_modality(task, provider, entry)
+        if not ok:
+            considered.append({"provider": provider, "skipped": why})
+            continue
         exhausted, quota_note = quota_exhausted(provider, tracker)
         if exhausted:
             considered.append({"provider": provider, "skipped": quota_note})
@@ -289,7 +366,7 @@ def route(task: str, registry: Optional[list[dict]] = None) -> RouteDecision:
         decision = RouteDecision(
             task=task,
             provider=provider,
-            model=_pick_model(entry),
+            model=_pick_model(entry, task),
             reason=f"{provider} first eligible ({quota_note})",
             considered=considered,
         )
@@ -378,7 +455,9 @@ def complete(
             record_request(provider, error=f"{type(exc).__name__}: {exc}"[:200])
             logger.warning("router: %s failed (%s), trying next", provider, exc)
             continue
-        record_request(provider, model=_pick_model(registry_by_id().get(provider)))
+        # Pass `task` so the tracker names the model actually used for it; a
+        # multi-model provider would otherwise be logged with models[0].
+        record_request(provider, model=_pick_model(registry_by_id().get(provider), task))
         return result
 
     raise llm.LLMError("router: all eligible providers failed: " + "; ".join(errors))

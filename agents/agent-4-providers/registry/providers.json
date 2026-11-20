@@ -87,6 +87,14 @@
         ],
         "context_tokens": null,
         "notes": "Speech recognition; word-level timestamps"
+      },
+      {
+        "model_id": "openai/gpt-oss-120b",
+        "modality": [
+          "text"
+        ],
+        "context_tokens": null,
+        "notes": "Text completion via chat/completions. This is the model agent/modules/llm.py sends as GROQ_MODEL; it was missing from the registry, so groq declared only audio-to-text while ROUTING_TABLE uses it as a text fallback."
       }
     ],
     "access_type": "free_tier",
