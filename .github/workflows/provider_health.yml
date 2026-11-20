@@ -1,0 +1,94 @@
+name: Provider Health & Routing
+
+on:
+  schedule:
+    # Every 6 hours. GitHub cron is UTC regardless of the TZ env below.
+    - cron: '15 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      strict:
+        description: 'Fail the run if a critical provider is down'
+        required: false
+        default: 'true'
+
+permissions:
+  contents: write
+
+env:
+  TZ: Asia/Kolkata
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Unpack ENV_FILE if provided
+        env:
+          ENV_FILE_CONTENT: ${{ secrets.ENV_FILE }}
+        run: |
+          if [ -n "$ENV_FILE_CONTENT" ]; then
+            printf '%s\n' "$ENV_FILE_CONTENT" > .env
+            echo ".env written from ENV_FILE secret."
+          else
+            echo "::warning::secret ENV_FILE is empty; providers needing a key will be skipped"
+          fi
+
+      - name: Probe provider endpoints
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          POLLINATIONS_AI_API_KEY: ${{ secrets.POLLINATIONS_AI_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
+          GH_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set +e
+          if [ "${{ github.event.inputs.strict }}" = "false" ]; then
+            python scripts/health_check.py 2>&1 | tee health.log
+          else
+            python scripts/health_check.py --strict 2>&1 | tee health.log
+          fi
+          code=${PIPESTATUS[0]}
+          {
+            echo "### Provider health"
+            echo '```text'
+            cat health.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$code"
+
+      - name: Keep only the 10 most recent reports
+        run: |
+          cd agents/agent-4-providers/health
+          ls -1 health-2*.json 2>/dev/null | sort | head -n -10 | while read -r f; do
+            echo "pruning $f"; rm -f "$f"
+          done
+
+      - name: Publish updated registry and reports
+        run: |
+          if git diff --quiet && [ -z "$(git status --porcelain)" ]; then
+            echo "No health changes to publish."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add agents/agent-4-providers/registry/providers.json \
+                  agents/agent-4-providers/health/
+          git commit -m "chore(providers): refresh endpoint health from run ${{ github.run_id }}"
+          git push
