@@ -78,7 +78,21 @@ def complete(
     """
     Return a text completion. Tries Gemini → Groq → OpenRouter on 429/failure.
     Raises LLMError only if all three fail.
+
+    Set LLM_ROUTER=true to route through agent.router instead, which consults
+    the provider registry, per-provider health and the quota tracker. The chain
+    below stays the default so the working path is never changed implicitly.
+
+    Note: complete_json() still uses the direct chain below; it has its own
+    multi-provider retry and is deliberately left alone.
     """
+    from agent.router import router_enabled
+
+    if router_enabled():
+        from agent.router import complete as _routed_complete
+
+        return _routed_complete(prompt, system, temperature, max_tokens)
+
     errors: list[str] = []
 
     # 1. Gemini
