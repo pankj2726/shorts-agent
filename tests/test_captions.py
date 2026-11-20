@@ -425,3 +425,46 @@ def test_requested_but_missing_caption_file_is_an_error(tmp_path):
                                duration_s=1.2, video_id="v1")
     assert "does not exist" in str(exc.value)
     assert not out.exists()
+
+
+def test_unknown_audio_duration_does_not_fabricate_a_sync_check(tmp_path, monkeypatch):
+    """
+    ffprobe failure makes tts report 0.0, and render's padding fallback turns
+    that into 30.0. Validating captions against that invented number would let
+    subtitles run far past the real audio and still pass.
+    """
+    from agent.modules import render
+
+    calls = []
+    monkeypatch.setattr(render, "_ffmpeg_burn_captions",
+                        lambda v, p, o: calls.append(p))
+    video = tmp_path / "normalized.mp4"
+    video.write_bytes(b"\x00" * 32)
+    out = tmp_path / "final.mp4"
+    # Captions end at 1.1s; the real audio is unknown.
+    vtt = _vtt(tmp_path, VTT)
+
+    render._burn_or_export(video, str(vtt), out, duration_s=0.0, video_id="v1")
+
+    assert len(calls) == 1, "render still proceeds on a probe failure"
+
+
+def test_captions_are_checked_against_real_audio_not_the_padding_fallback(tmp_path):
+    """
+    Regression for the defect the review found: with a 3s voiceover and a failed
+    probe, the padded 30.0 must not become the sync reference.
+    """
+    from agent.modules import captions as cap
+
+    long_captions = "WEBVTT\n\n00:00:01.000 --> 00:00:29.000\nruns on\n"
+    f = _vtt(tmp_path, long_captions)
+
+    # Against the real 3s audio this must fail.
+    real = cap.validate_captions(f, 3.0)
+    assert real["passed"] is False
+    assert real["sync_checked"] is True
+
+    # Against the fabricated 30.0 it would have passed - which is the bug.
+    fabricated = cap.validate_captions(f, 30.0)
+    assert fabricated["passed"] is True
+    assert fabricated["sync_checked"] is True
