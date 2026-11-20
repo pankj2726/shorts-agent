@@ -9,8 +9,8 @@ generate_phase2.py — Phase 2 Content Engine:
 """
 import json
 import logging
-import os
 import sys
+import time
 from pathlib import Path
 
 # Setup paths
@@ -37,7 +37,7 @@ def generate_series_ideas(series_name: str, series_focus: str, count: int = 5, e
     banned_topics = load_text(CONFIG_DIR / "banned_topics.md")
     existing_clause = ""
     if existing_titles:
-        existing_clause = f"Avoid these already created ideas:\n- " + "\n- ".join(existing_titles)
+        existing_clause = "Avoid these already created ideas:\n- " + "\n- ".join(existing_titles)
 
     prompt = f"""
 You are the Strategist for the YouTube Shorts channel described below.
@@ -266,7 +266,7 @@ def main() -> None:
         remaining = [i for i in ideas if i not in top_10]
         top_10 += remaining[: 10 - len(top_10)]
 
-    print(f"\nSelected top 10 ideas for scripting across all 3 series.\n")
+    print("\nSelected top 10 ideas for scripting across all 3 series.\n")
 
     # Step 3: Script each and validate QA Gate #1 (reusing any already validated in DB)
     conn = db.get_conn()
@@ -295,7 +295,7 @@ def main() -> None:
             scripts.append(script_data)
 
     print("\n" + "=" * 70)
-    print(f"✅ SUCCESS: Backlog Ready (30 Ideas) + 10 Fully Validated Scripts (10/10 QA Gate #1 Passed)")
+    print("✅ SUCCESS: Backlog Ready (30 Ideas) + 10 Fully Validated Scripts (10/10 QA Gate #1 Passed)")
     print("=" * 70)
 
     # Save artifact report

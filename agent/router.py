@@ -25,9 +25,9 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from agent.modules.config import env_bool
 
@@ -61,7 +61,17 @@ ROUTING_TABLE: dict[str, list[str]] = {
     # still frame and reported success. Better to raise RoutingError than to
     # hand back the wrong medium.
     "video_generation": ["wan-video"],
-    "captions": ["edge-tts", "whisperx"],
+    # Captions are produced FROM audio. agent/modules/captions.py resolves word
+    # timings via Groq's whisper-large-v3 transcription endpoint, so the
+    # providers here are speech-recognition ones. edge-tts was listed first,
+    # which is the opposite direction — it synthesises speech from text. The VTT
+    # that render.py burns in comes out of the TTS call as a by-product and is
+    # already covered by the `voiceover` task.
+    "captions": ["whisperx", "groq"],
+    # Timed subtitle formatting (WebVTT -> styled ASS -> burned in) is pure
+    # local work in captions.vtt_to_ass() and render._ffmpeg_burn_captions().
+    # It needs no provider and imposes no modality.
+    "subtitle_formatting": ["ffmpeg-local"],
     "rendering": ["ffmpeg-local"],
 }
 
@@ -76,9 +86,10 @@ TASK_MODALITY: dict[str, tuple[str, ...]] = {
     "voiceover": ("text-to-speech",),
     "music_generation": ("text-to-music",),
     "video_generation": ("text-to-video", "image-to-video"),
-    # Subtitles can be produced from audio or timed against speech, so either
-    # declared modality is acceptable here.
-    "captions": ("text-to-speech", "audio-to-text"),
+    # Captions come FROM audio: transcription to word-level timings.
+    "captions": ("audio-to-text",),
+    # Formatting existing timings into ASS/VTT is local, provider-free work.
+    "subtitle_formatting": (),
     "rendering": (),
 }
 
@@ -92,6 +103,10 @@ LOCAL_PROVIDERS = {
 
 HEALTH_BLOCKING = {"down"}
 
+# Reasons beginning with this marker mean "allowed, but a compatibility rule
+# was bypassed" rather than a plain pass. Surfaced on RouteDecision.
+COMPAT_EXCEPTION_PREFIX = "compat-exception:"
+
 
 class RoutingError(Exception):
     """Raised when no provider can serve a task."""
@@ -103,11 +118,14 @@ class RouteDecision:
 
     task: str
     provider: str
-    model: Optional[str]
+    model: str | None
     reason: str
     considered: list[dict] = field(default_factory=list)
+    # Compatibility rules that were bypassed to reach this decision, e.g.
+    # ["compat-exception:local-tooling"]. Empty means every check applied.
+    compat_exceptions: list[str] = field(default_factory=list)
     at: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat(timespec="seconds")
+        default_factory=lambda: datetime.now(UTC).isoformat(timespec="seconds")
     )
 
     def as_dict(self) -> dict:
@@ -117,6 +135,7 @@ class RouteDecision:
             "model": self.model,
             "reason": self.reason,
             "considered": self.considered,
+            "compat_exceptions": self.compat_exceptions,
             "at": self.at,
         }
 
@@ -134,7 +153,7 @@ def load_registry(path: Path = REGISTRY_PATH) -> list[dict]:
     return data if isinstance(data, list) else []
 
 
-def registry_by_id(registry: Optional[list[dict]] = None) -> dict[str, dict]:
+def registry_by_id(registry: list[dict] | None = None) -> dict[str, dict]:
     """Index the registry by provider id."""
     reg = registry if registry is not None else load_registry()
     return {entry.get("provider", ""): entry for entry in reg if entry.get("provider")}
@@ -153,7 +172,7 @@ def has_credential(provider: str) -> bool:
     return bool(os.environ.get(env_name, "").strip())
 
 
-def is_eligible(provider: str, entry: Optional[dict] = None) -> tuple[bool, str]:
+def is_eligible(provider: str, entry: dict | None = None) -> tuple[bool, str]:
     """
     Return (eligible, reason) for a provider.
 
@@ -173,7 +192,7 @@ def is_eligible(provider: str, entry: Optional[dict] = None) -> tuple[bool, str]
     return True, "eligible"
 
 
-def provider_modalities(entry: Optional[dict]) -> set[str]:
+def provider_modalities(entry: dict | None) -> set[str]:
     """Every modality declared across a provider's models."""
     if not entry:
         return set()
@@ -187,30 +206,141 @@ def provider_modalities(entry: Optional[dict]) -> set[str]:
 def supports_task_modality(
     task: str,
     provider: str,
-    entry: Optional[dict] = None,
+    entry: dict | None = None,
+    policy: str | None = None,
 ) -> tuple[bool, str]:
     """
     Return (supports, reason) for whether `provider` can serve `task`.
 
-    Deliberately fail-open: local tooling has no registry entry, and some
-    registry entries predate the `modality` field, so an absence of declared
-    modalities is treated as "unknown, allow" rather than as a rejection.
-    Only an explicit mismatch blocks.
+    Compatibility policy (ROUTER_MODALITY_POLICY):
+
+    * ``strict`` (default) — a provider that is present in the registry must
+      declare a modality that matches the task. An entry with no declared
+      modality is rejected rather than waved through, so an undocumented model
+      can never silently serve production traffic.
+    * ``legacy`` — the previous fail-open behaviour, where an absent modality
+      declaration is treated as "unknown, allow". Opt in explicitly with
+      ``ROUTER_MODALITY_POLICY=legacy`` when running against an older registry.
+
+    Two exceptions survive in both modes, because both are deliberate rather
+    than unknown:
+
+    * local tooling in LOCAL_PROVIDERS has no registry entry at all;
+    * tasks whose TASK_MODALITY entry is empty impose no constraint.
+
+    Every exception is returned as a ``compat-exception:`` reason so callers and
+    logs can see that a rule was bypassed and why.
     """
+    active = policy or modality_policy()
+
+    # Documented exception, checked first: local tools are not registry entries
+    # by design, so no registry-based rule can apply to them. Reporting this
+    # ahead of "no constraint" keeps the more specific exception visible.
+    if provider in LOCAL_PROVIDERS:
+        return True, "compat-exception:local-tooling"
+
     required = TASK_MODALITY.get(task)
     if not required:
-        return True, ""
-    if provider in LOCAL_PROVIDERS or entry is None:
-        return True, ""
+        return True, "compat-exception:no-modality-constraint"
+
+    if entry is None:
+        # is_eligible() already rejects non-local providers missing from the
+        # registry; reaching here means the caller is probing in isolation.
+        return False, "not in registry"
+
     declared = provider_modalities(entry)
     if not declared:
-        return True, ""
+        if active == "legacy":
+            logger.warning(
+                "router: %s declares no modality; allowed only because "
+                "ROUTER_MODALITY_POLICY=legacy",
+                provider,
+            )
+            return True, "compat-exception:undeclared-modality-legacy"
+        return False, (
+            f"no declared modality ({active} policy requires registered "
+            "providers to declare capabilities)"
+        )
+
     if declared & set(required):
         return True, ""
+
     return False, (
         f"modality mismatch: declares {sorted(declared)}, "
         f"{task} needs one of {list(required)}"
     )
+
+
+def modality_policy() -> str:
+    """Active compatibility policy: 'strict' (default) or 'legacy'."""
+    value = os.environ.get("ROUTER_MODALITY_POLICY", "").strip().lower()
+    if value == "legacy":
+        return "legacy"
+    if value and value != "strict":
+        logger.warning(
+            "router: unknown ROUTER_MODALITY_POLICY=%r; using strict", value
+        )
+    return "strict"
+
+
+def validate_registry(
+    registry: list[dict] | None = None,
+    policy: str | None = None,
+) -> list[dict]:
+    """
+    Audit the registry for entries that would fail modality validation.
+
+    Returns one finding per problem so operators can see compatibility
+    exceptions instead of discovering them mid-pipeline. Findings are dicts of
+    {provider, issue, detail}.
+    """
+    active = policy or modality_policy()
+    findings: list[dict] = []
+    reg = registry if registry is not None else load_registry()
+    known = {e.get("provider") for e in reg if e.get("provider")}
+
+    def add(provider, issue, detail, severity):
+        findings.append({
+            "provider": provider, "issue": issue,
+            "detail": detail, "severity": severity,
+        })
+
+    for entry in reg:
+        provider = entry.get("provider", "")
+        models = entry.get("models") or []
+        # A provider that has not been integrated yet is allowed to be
+        # incomplete — it cannot be selected either way. Anything integrated is
+        # held to the full standard, because it can receive production traffic.
+        integrated = entry.get("integration_status") == "integrated"
+        severity = "error" if integrated else "info"
+
+        if not models:
+            add(provider, "no_models",
+                "registered with an empty models list", severity)
+        declared = provider_modalities(entry)
+        if not declared:
+            add(provider, "no_modality_declared",
+                f"would be rejected for every task under {active} policy; "
+                "declare a modality per model", severity)
+        for model in models:
+            if not isinstance(model, dict):
+                continue
+            if not model.get("model_id"):
+                add(provider, "missing_model_id",
+                    "model entry has no model_id", "error")
+            elif integrated and not (model.get("modality") or []):
+                add(provider, "model_without_modality",
+                    f"{model.get('model_id')} declares no modality", "error")
+
+    # Providers referenced by the routing table but absent from the registry.
+    for task, providers in ROUTING_TABLE.items():
+        for provider in providers:
+            if provider in LOCAL_PROVIDERS:
+                continue
+            if provider not in known:
+                add(provider, "not_in_registry",
+                    f"referenced by task {task!r} but not registered", "error")
+    return findings
 
 
 # ─── Quota tracker ───────────────────────────────────────────────────────────
@@ -219,7 +349,7 @@ def _today() -> str:
     return date.today().isoformat()
 
 
-def load_quota(path: Optional[Path] = None) -> dict[str, dict]:
+def load_quota(path: Path | None = None) -> dict[str, dict]:
     """Load the per-provider quota tracker, resetting stale daily counters."""
     path = path or QUOTA_PATH
     try:
@@ -238,7 +368,7 @@ def load_quota(path: Optional[Path] = None) -> dict[str, dict]:
     return data
 
 
-def save_quota(tracker: dict[str, dict], path: Optional[Path] = None) -> None:
+def save_quota(tracker: dict[str, dict], path: Path | None = None) -> None:
     """Persist the quota tracker, creating parent directories as needed."""
     path = path or QUOTA_PATH
     try:
@@ -249,7 +379,7 @@ def save_quota(tracker: dict[str, dict], path: Optional[Path] = None) -> None:
         logger.warning("router: cannot write quota tracker %s: %s", path, exc)
 
 
-def quota_entry(provider: str, tracker: Optional[dict[str, dict]] = None) -> dict:
+def quota_entry(provider: str, tracker: dict[str, dict] | None = None) -> dict:
     """Return the tracker entry for a provider, creating it if absent."""
     own = tracker is None
     tracker = load_quota() if own else tracker
@@ -272,7 +402,7 @@ def quota_entry(provider: str, tracker: Optional[dict[str, dict]] = None) -> dic
     return entry
 
 
-def quota_exhausted(provider: str, tracker: Optional[dict[str, dict]] = None) -> tuple[bool, str]:
+def quota_exhausted(provider: str, tracker: dict[str, dict] | None = None) -> tuple[bool, str]:
     """
     True when the provider's known daily request limit has been reached.
 
@@ -291,10 +421,10 @@ def quota_exhausted(provider: str, tracker: Optional[dict[str, dict]] = None) ->
 
 def record_request(
     provider: str,
-    model: Optional[str] = None,
+    model: str | None = None,
     tokens: int = 0,
-    error: Optional[str] = None,
-    path: Optional[Path] = None,
+    error: str | None = None,
+    path: Path | None = None,
 ) -> None:
     """Record one request against a provider's daily counters."""
     tracker = load_quota(path)
@@ -309,7 +439,7 @@ def record_request(
 
 # ─── Routing ─────────────────────────────────────────────────────────────────
 
-def _pick_model(entry: Optional[dict], task: Optional[str] = None) -> Optional[str]:
+def _pick_model(entry: dict | None, task: str | None = None) -> str | None:
     """
     Model id to report for a provider, preferring one that matches the task.
 
@@ -332,7 +462,7 @@ def _pick_model(entry: Optional[dict], task: Optional[str] = None) -> Optional[s
     return first.get("model_id") if isinstance(first, dict) else None
 
 
-def route(task: str, registry: Optional[list[dict]] = None) -> RouteDecision:
+def route(task: str, registry: list[dict] | None = None) -> RouteDecision:
     """
     Choose a provider for `task`.
 
@@ -347,6 +477,7 @@ def route(task: str, registry: Optional[list[dict]] = None) -> RouteDecision:
     reg = registry_by_id(registry if registry is not None else load_registry())
     tracker = load_quota()
     considered: list[dict] = []
+    exceptions: list[str] = []
 
     for provider in candidates:
         entry = reg.get(provider)
@@ -358,6 +489,11 @@ def route(task: str, registry: Optional[list[dict]] = None) -> RouteDecision:
         if not ok:
             considered.append({"provider": provider, "skipped": why})
             continue
+        if why.startswith(COMPAT_EXCEPTION_PREFIX):
+            # The decision is allowed, but a compatibility rule was bypassed.
+            # Surface it rather than letting it pass invisibly.
+            exceptions.append(f"{provider}:{why}")
+            logger.info("router: %s allowed via %s", provider, why)
         exhausted, quota_note = quota_exhausted(provider, tracker)
         if exhausted:
             considered.append({"provider": provider, "skipped": quota_note})
@@ -369,6 +505,7 @@ def route(task: str, registry: Optional[list[dict]] = None) -> RouteDecision:
             model=_pick_model(entry, task),
             reason=f"{provider} first eligible ({quota_note})",
             considered=considered,
+            compat_exceptions=exceptions,
         )
         _log_decision(decision)
         return decision
@@ -384,7 +521,7 @@ def route(task: str, registry: Optional[list[dict]] = None) -> RouteDecision:
     raise RoutingError(f"no eligible provider for task {task!r}: {considered}")
 
 
-def _log_decision(decision: RouteDecision, path: Optional[Path] = None) -> None:
+def _log_decision(decision: RouteDecision, path: Path | None = None) -> None:
     """Append one decision to the JSONL routing log (best effort)."""
     path = path or DECISION_LOG
     try:
@@ -412,6 +549,21 @@ _LLM_BACKENDS = {
 }
 
 
+def _is_usable_completion(result: Any) -> tuple[bool, str]:
+    """
+    Validate a backend's reply before it is accepted as a completion.
+
+    Providers do return 200s with empty bodies, and a truncated stream can yield
+    None. Accepting those silently would let an empty script travel all the way
+    to the renderer with nothing in the logs to explain it.
+    """
+    if not isinstance(result, str):
+        return False, f"expected str, got {type(result).__name__}"
+    if not result.strip():
+        return False, "empty response"
+    return True, ""
+
+
 def router_enabled() -> bool:
     """True when LLM traffic should be routed through this module."""
     return env_bool("LLM_ROUTER", False)
@@ -419,7 +571,7 @@ def router_enabled() -> bool:
 
 def complete(
     prompt: str,
-    system: Optional[str] = None,
+    system: str | None = None,
     temperature: float = 0.7,
     max_tokens: int = 4096,
     task: str = "scriptwriting",
@@ -455,6 +607,20 @@ def complete(
             record_request(provider, error=f"{type(exc).__name__}: {exc}"[:200])
             logger.warning("router: %s failed (%s), trying next", provider, exc)
             continue
+
+        # A 200 with an empty body is still a failure. Without this check an
+        # empty or non-string reply was returned as a valid completion, so an
+        # empty script could reach the renderer with nothing logged.
+        usable, why = _is_usable_completion(result)
+        if not usable:
+            errors.append(f"{provider}: {why}")
+            record_request(provider, error=why[:200])
+            logger.warning(
+                "router: %s returned an unusable response (%s), trying next",
+                provider, why,
+            )
+            continue
+
         # Pass `task` so the tracker names the model actually used for it; a
         # multi-model provider would otherwise be logged with models[0].
         record_request(provider, model=_pick_model(registry_by_id().get(provider), task))
