@@ -101,6 +101,7 @@ class Provider:
         from agent.modules import llm
 
         llm.LAST_ACTUAL_MODEL = None
+        llm.LAST_USAGE = None
         return self._invoke(prompt, system, temperature, max_tokens, model)
 
     def complete(
@@ -152,6 +153,12 @@ class Provider:
     def supports_model(self, model_id: str) -> bool:
         """Whether the registry declares `model_id` for this provider."""
         return any(m.model_id == model_id for m in self.declared_models())
+
+    def last_usage(self) -> dict | None:
+        """Token usage the provider reported for its most recent call."""
+        from agent.modules import llm
+
+        return llm.LAST_USAGE
 
     def last_model(self) -> str | None:
         """

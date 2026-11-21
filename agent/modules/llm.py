@@ -15,6 +15,7 @@ import os
 import time
 from typing import Any
 
+
 def _load_env_file() -> None:
     """Populate os.environ from the project .env. Delegates to config."""
     from agent.modules.config import load_env_file
@@ -26,10 +27,12 @@ _load_env_file()
 import requests
 from tenacity import (
     retry,
-    retry_if_exception_type,
+    retry_if_exception,
     stop_after_attempt,
     wait_exponential,
 )
+
+from agent.modules import provider_errors
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +58,16 @@ LAST_ACTUAL_MODEL: str | None = None
 def _note_actual_model(model_id: str | None) -> None:
     global LAST_ACTUAL_MODEL
     LAST_ACTUAL_MODEL = model_id or None
+
+
+# Reported token usage for the most recent call, when the provider supplies it.
+# Used to reconcile a budget estimate against what was actually consumed.
+LAST_USAGE: dict | None = None
+
+
+def _note_usage(usage: dict | None) -> None:
+    global LAST_USAGE
+    LAST_USAGE = usage if isinstance(usage, dict) else None
 
 
 class LLMError(Exception):
@@ -176,8 +189,70 @@ def complete_json(
 
 # ─── Provider implementations ─────────────────────────────────────────────────
 
-class _RateLimited(Exception):
-    pass
+class _RateLimited(provider_errors.RateLimitError):
+    """
+    Retained because existing callers and tests catch it by name.
+
+    Now a RateLimitError, so `isinstance` checks and the retry predicate treat
+    it consistently with every other classified failure.
+    """
+
+    def __init__(self, message: str = "", provider: str = "unknown") -> None:
+        super().__init__(provider, message or "rate limited")
+
+
+def _post(url: str, provider: str, **kwargs) -> requests.Response:
+    """
+    POST with transport failures classified instead of left raw.
+
+    Without this, a Timeout or ConnectionError escaped the retry predicate
+    (which now keys off the taxonomy rather than RequestException) and would
+    not be retried at all.
+    """
+    try:
+        return requests.post(url, **kwargs)
+    except requests.exceptions.RequestException as exc:
+        raise provider_errors.classify_exception(provider, exc) from exc
+
+
+def _json(resp: requests.Response, provider: str) -> dict:
+    """Parse a JSON body, or raise MalformedResponseError rather than KeyError."""
+    try:
+        return resp.json()
+    except Exception as exc:  # any decode failure is a malformed response
+        raise provider_errors.MalformedResponseError(
+            provider, "response was not valid JSON", detail=str(exc)
+        ) from exc
+
+
+def _extract(data: dict, provider: str, *path: str) -> str:
+    """
+    Pull a nested string out of a response body.
+
+    A 200 whose shape is unexpected is a malformed response, not a crash: a
+    bare KeyError here would propagate as an unclassified exception and the
+    retry predicate would treat it as a bug rather than a provider fault.
+    """
+    node: object = data
+    try:
+        for part in path:
+            node = node[part] if isinstance(node, dict) else node[int(part)]
+        if not isinstance(node, str):
+            node = str(node)
+        return node
+    except (KeyError, IndexError, TypeError, ValueError) as exc:
+        raise provider_errors.MalformedResponseError(
+            provider, f"response missing {'.'.join(path)}", detail=str(exc)
+        ) from exc
+
+
+def _raise_for(provider: str, resp: requests.Response) -> None:
+    """Classify a non-2xx response and raise the matching taxonomy error."""
+    err = provider_errors.classify_http(provider, resp.status_code, resp.text)
+    logger.warning("llm: %s %s (HTTP %s): %s",
+                   provider, err.category, resp.status_code, err.detail)
+    raise err
+
 
 
 def _gemini(
@@ -191,6 +266,7 @@ def _gemini(
     if not key:
         raise LLMError("GEMINI_API_KEY is empty")
 
+    PROVIDER = "google-gemini"
     # An explicit model wins; otherwise the historical default is unchanged.
     model_id = model or GEMINI_MODEL
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent?key={key}"
@@ -205,41 +281,36 @@ def _gemini(
         payload["system_instruction"] = {"parts": [{"text": system}]}
 
     @retry(
-        retry=retry_if_exception_type(requests.exceptions.RequestException),
+        retry=retry_if_exception(provider_errors.is_retryable),
         stop=stop_after_attempt(_MAX_RETRIES),
         wait=wait_exponential(multiplier=1, min=_BACKOFF_MIN, max=_BACKOFF_MAX),
         reraise=True,
     )
     def _call() -> str:
-        resp = requests.post(url, json=payload, timeout=30)
-        if resp.status_code == 429:
-            raise _RateLimited(resp.text)
+        resp = _post(url, PROVIDER, json=payload, timeout=30)
+        # The legacy default retried against gemini-2.0-flash on a 404. Kept
+        # only when no model was explicitly requested: swapping models under an
+        # explicit request would make telemetry claim a model that never ran.
+        if resp.status_code == 404 and model is None:
+            alt = (
+                "https://generativelanguage.googleapis.com/v1beta/models/"
+                f"gemini-2.0-flash:generateContent?key={key}"
+            )
+            r2 = _post(alt, PROVIDER, json=payload, timeout=30)
+            if r2.status_code == 200:
+                data2 = _json(r2, PROVIDER)
+                _note_actual_model(data2.get("modelVersion") or "gemini-2.0-flash")
+                return _extract(data2, PROVIDER,
+                                "candidates", 0, "content", "parts", 0, "text")
         if resp.status_code != 200:
-            # The legacy default silently retried against gemini-2.0-flash on a
-            # 404. That is kept only when no model was explicitly requested:
-            # swapping models under an explicit request would make telemetry
-            # claim a model that never served the call.
-            if resp.status_code == 404 and model is None:
-                alt_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={key}"
-                r2 = requests.post(alt_url, json=payload, timeout=30)
-                if r2.status_code == 200:
-                    data2 = r2.json()
-                    _note_actual_model(
-                        data2.get("modelVersion") or "gemini-2.0-flash"
-                    )
-                    return data2["candidates"][0]["content"]["parts"][0]["text"]
-            logger.warning("llm: Gemini error: %s", resp.text[:300])
-            resp.raise_for_status()
-        data = resp.json()
+            _raise_for(PROVIDER, resp)
+        data = _json(resp, PROVIDER)
         _note_actual_model(data.get("modelVersion") or model_id)
-        return data["candidates"][0]["content"]["parts"][0]["text"]
+        _note_usage(data.get("usageMetadata"))
+        return _extract(data, PROVIDER,
+                        "candidates", 0, "content", "parts", 0, "text")
 
-    try:
-        return _call()
-    except Exception as e:
-        if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
-            raise _RateLimited(e) from e
-        raise
+    return _call()
 
 
 def _groq(
@@ -253,17 +324,18 @@ def _groq(
     if system:
         messages.append({"role": "system", "content": system})
     messages.append({"role": "user", "content": prompt})
+    PROVIDER = "groq"
     model_id = model or GROQ_MODEL
 
     @retry(
-        retry=retry_if_exception_type(requests.exceptions.RequestException),
+        retry=retry_if_exception(provider_errors.is_retryable),
         stop=stop_after_attempt(_MAX_RETRIES),
         wait=wait_exponential(multiplier=1, min=_BACKOFF_MIN, max=_BACKOFF_MAX),
         reraise=True,
     )
     def _call() -> str:
-        resp = requests.post(
-            "https://api.groq.com/openai/v1/chat/completions",
+        resp = _post(
+            "https://api.groq.com/openai/v1/chat/completions", PROVIDER,
             headers={
                 "Authorization": f"Bearer {os.environ['GROQ_API_KEY']}",
                 "Content-Type": "application/json",
@@ -276,21 +348,14 @@ def _groq(
             },
             timeout=60,
         )
-        if resp.status_code == 429:
-            raise _RateLimited(f"HTTP 429 from Groq")
-        resp.raise_for_status()
-        data = resp.json()
+        if resp.status_code != 200:
+            _raise_for(PROVIDER, resp)
+        data = _json(resp, PROVIDER)
         _note_actual_model(data.get("model") or model_id)
-        return data["choices"][0]["message"]["content"]
+        _note_usage(data.get("usage"))
+        return _extract(data, PROVIDER, "choices", 0, "message", "content")
 
-    try:
-        return _call()
-    except _RateLimited:
-        raise
-    except Exception as e:
-        if "429" in str(e):
-            raise _RateLimited(e) from e
-        raise
+    return _call()
 
 
 def _openrouter(
@@ -304,17 +369,18 @@ def _openrouter(
     if system:
         messages.append({"role": "system", "content": system})
     messages.append({"role": "user", "content": prompt})
+    PROVIDER = "openrouter"
     model_id = model or OPENROUTER_MODEL
 
     @retry(
-        retry=retry_if_exception_type(requests.exceptions.RequestException),
+        retry=retry_if_exception(provider_errors.is_retryable),
         stop=stop_after_attempt(_MAX_RETRIES),
         wait=wait_exponential(multiplier=1, min=_BACKOFF_MIN, max=_BACKOFF_MAX),
         reraise=True,
     )
     def _call() -> str:
-        resp = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
+        resp = _post(
+            "https://openrouter.ai/api/v1/chat/completions", PROVIDER,
             headers={
                 "Authorization": f"Bearer {os.environ['OPENROUTER_API_KEY']}",
                 "Content-Type": "application/json",
@@ -329,11 +395,13 @@ def _openrouter(
             },
             timeout=60,
         )
-        resp.raise_for_status()
-        data = resp.json()
+        if resp.status_code != 200:
+            _raise_for(PROVIDER, resp)
+        data = _json(resp, PROVIDER)
         # OpenRouter routes a request to whichever upstream serves the slug, and
         # reports the concrete model it settled on. Record that, not the slug.
         _note_actual_model(data.get("model") or model_id)
-        return data["choices"][0]["message"]["content"]
+        _note_usage(data.get("usage"))
+        return _extract(data, PROVIDER, "choices", 0, "message", "content")
 
     return _call()

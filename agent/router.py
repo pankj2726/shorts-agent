@@ -29,6 +29,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
+from agent.modules import budget, circuit_breaker, provider_errors, provider_health
 from agent.modules.config import env_bool
 
 logger = logging.getLogger(__name__)
@@ -732,12 +733,62 @@ def complete(
         if provider != requested_provider:
             fallbacks.append(f"{provider}: used after {requested_provider}")
 
+        # Both scopes are consulted: a model-level breaker keeps one bad model
+        # id from taking the whole provider out of rotation, while the
+        # provider-level one covers an outage that affects everything on it.
+        scopes = [provider] + ([f"{provider}/{model}"] if model else [])
+        breakers = [circuit_breaker.get(scope) for scope in scopes]
+
+        # Runtime health. Unknown is allowed: absent evidence is not evidence
+        # of failure, and refusing it would leave nothing routable at startup.
+        healthy, health_reason = provider_health.is_available(provider)
+        if not healthy:
+            errors.append(f"{provider}: {health_reason}")
+            fallbacks.append(f"{provider}: skipped, {health_reason}")
+            logger.warning("router: skipping %s (%s)", provider, health_reason)
+            continue
+
+        admitted, breaker_reason = True, ""
+        for breaker in breakers:
+            admitted, breaker_reason = breaker.allow()
+            if not admitted:
+                break
+        if not admitted:
+            errors.append(f"{provider}: breaker {breaker_reason}")
+            fallbacks.append(f"{provider}: skipped, breaker {breaker_reason}")
+            logger.warning("router: skipping %s (breaker %s)", provider, breaker_reason)
+            continue
+
+        # Budget is reserved before dispatch, so the ceiling is checked against
+        # a cost that is already held rather than one that might be.
+        try:
+            reservation = budget.reserve(provider, model, task, prompt, max_tokens)
+        except budget.BudgetExceededError as exc:
+            errors.append(f"{provider}: {exc.reason}")
+            fallbacks.append(f"{provider}: skipped, {exc.reason}")
+            logger.warning("router: skipping %s (budget: %s)", provider, exc.reason)
+            continue
+
         try:
             result = adapter._call(prompt, system, temperature, max_tokens, model)
         except Exception as exc:  # noqa: BLE001 - provider errors are expected
-            errors.append(f"{provider}: {type(exc).__name__}")
-            record_request(provider, error=f"{type(exc).__name__}: {exc}"[:200])
-            logger.warning("router: %s failed (%s), trying next", provider, exc)
+            err = provider_errors.classify_exception(provider, exc)
+            errors.append(f"{provider}: {err.category}")
+            fallbacks.append(f"{provider}: {err.category}")
+            # Category first for stable machine reading, then the exception
+            # class, so nothing that parsed the old format loses information.
+            record_request(
+                provider,
+                error=f"{err.category} ({type(exc).__name__}): {err.detail}"[:200],
+            )
+            provider_health.record_failure(provider, err.category, err.detail)
+            for breaker in breakers:
+                breaker.record_failure(err.category)
+            budget.release(reservation)
+            logger.warning(
+                "router: %s failed [%s%s], trying next", provider, err.category,
+                "" if err.retryable else ", not retryable",
+            )
             continue
 
         # A 200 with an empty body is still a failure. Without this check an
@@ -746,12 +797,25 @@ def complete(
         usable, why = _is_usable_completion(result)
         if not usable:
             errors.append(f"{provider}: {why}")
+            fallbacks.append(f"{provider}: {why}")
             record_request(provider, error=why[:200])
+            provider_health.record_failure(provider, "malformed_response", why)
+            for breaker in breakers:
+                breaker.record_failure("malformed_response")
+            budget.release(reservation)
             logger.warning(
                 "router: %s returned an unusable response (%s), trying next",
                 provider, why,
             )
             continue
+
+        usage = adapter.last_usage()
+        actual_cost = budget.cost_from_usage(provider, model, usage)
+        budget.settle(reservation, actual=actual_cost, usage=usage or {},
+                      outcome="ok")
+        provider_health.record_success(provider)
+        for breaker in breakers:
+            breaker.record_success()
 
         # Record the model the provider actually answered with, not the one we
         # asked for. Falls back to the request when the provider does not
@@ -767,6 +831,9 @@ def complete(
             "model_used": model_used,
             "model_substituted": bool(model_used != requested_model),
             "fallbacks": fallbacks,
+            "cost_estimated": reservation.estimated,
+            "cost_actual": reservation.actual,
+            "usage": usage or {},
             "at": datetime.now(UTC).isoformat(timespec="seconds"),
         }
         logger.info(
