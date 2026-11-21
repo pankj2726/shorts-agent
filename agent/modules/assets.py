@@ -6,6 +6,7 @@ License log: every asset is recorded in the DB assets table.
 import logging
 import os
 import random
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -195,15 +196,130 @@ def _fetch_pixabay_video(keyword: str, output_dir: Path, video_id: int) -> Optio
         return None
 
 
+MAX_CLIP_BYTES_DEFAULT = 120 * 1024 * 1024
+"""Default per-clip download cap (120 MiB). Env: SHORTS_MAX_CLIP_BYTES."""
+
+DOWNLOAD_DEADLINE_S_DEFAULT = 120.0
+"""Default overall transfer deadline in seconds. Env: SHORTS_DOWNLOAD_DEADLINE_S."""
+
+
+def _positive_setting(env_name: str, default: float, cast) -> float:
+    """
+    Read a numeric setting, refusing to silently disable a protection.
+
+    An unset variable yields the default. A present but invalid, zero or
+    negative value raises ValueError — falling back to the default there would
+    quietly ignore an operator's typo, and treating 0 as "unlimited" would turn
+    a misconfiguration into the exact unbounded download this guards against.
+    """
+    raw = os.environ.get(env_name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        value = cast(raw.strip())
+    except (TypeError, ValueError):
+        raise ValueError(
+            f"{env_name}={raw!r} is not a valid number; refusing to run with an "
+            "unbounded download"
+        ) from None
+    if value <= 0:
+        raise ValueError(
+            f"{env_name}={raw!r} must be greater than zero; 0 or negative would "
+            "disable the limit"
+        )
+    return value
+
+
 def _download(url: str, dest: Path) -> None:
+    """
+    Download one clip to `dest`, atomically and within bounded time and size.
+
+    Three independent limits, because they catch different failures:
+
+    * the socket read timeout, which catches a fully stalled connection;
+    * an overall monotonic deadline, which catches a slow-but-alive stream that
+      keeps dribbling chunks and so never trips the read timeout;
+    * a byte cap, enforced against both Content-Length and the bytes actually
+      received, since the header is advisory and may be absent or wrong.
+
+    The body is written to a temporary file in the destination directory and
+    renamed only after a complete transfer, so a failure never leaves a
+    truncated file at the final path. That matters more than it looks: the
+    idempotency check above returns early when `dest` exists, so a partial file
+    left behind would be treated as a valid clip on every later run and
+    rendered into a video.
+
+    Raises on any failure. Callers rely on the exception to avoid recording the
+    clip as usable; an aborted download must never look like a successful one.
+    """
     if dest.exists():
         return  # idempotent
-    with _SESSION.get(url, stream=True, timeout=60) as resp:
-        resp.raise_for_status()
-        with open(dest, "wb") as f:
-            for chunk in resp.iter_content(chunk_size=65536):
-                f.write(chunk)
-    logger.info("assets: downloaded %s", dest.name)
+
+    max_bytes = int(_positive_setting(
+        "SHORTS_MAX_CLIP_BYTES", MAX_CLIP_BYTES_DEFAULT, float))
+    deadline_s = _positive_setting(
+        "SHORTS_DOWNLOAD_DEADLINE_S", DOWNLOAD_DEADLINE_S_DEFAULT, float)
+
+    tmp = dest.with_name(f"{dest.name}.part")
+    started = time.monotonic()
+    written = 0
+
+    try:
+        with _SESSION.get(url, stream=True, timeout=60) as resp:
+            resp.raise_for_status()
+
+            # Reject early when the server declares an oversize body, but do not
+            # trust the header alone — it is checked again against real bytes.
+            declared = resp.headers.get("Content-Length")
+            if declared:
+                try:
+                    if int(declared) > max_bytes:
+                        raise RuntimeError(
+                            f"assets: {dest.name} declared Content-Length "
+                            f"{declared} exceeds limit {max_bytes}"
+                        )
+                except ValueError:
+                    logger.warning(
+                        "assets: unparseable Content-Length %r for %s; relying "
+                        "on streamed byte count", declared, dest.name,
+                    )
+
+            with open(tmp, "wb") as f:
+                for chunk in resp.iter_content(chunk_size=65536):
+                    if not chunk:
+                        continue
+                    # Checked before accepting the chunk, so the cap is never
+                    # exceeded by more than one chunk and the deadline is never
+                    # overshot by a full read.
+                    if time.monotonic() - started > deadline_s:
+                        raise RuntimeError(
+                            f"assets: {dest.name} exceeded the "
+                            f"{deadline_s:.0f}s download deadline after "
+                            f"{written} bytes"
+                        )
+                    written += len(chunk)
+                    if written > max_bytes:
+                        raise RuntimeError(
+                            f"assets: {dest.name} exceeded the {max_bytes} byte "
+                            f"limit after {written} bytes"
+                        )
+                    f.write(chunk)
+
+        os.replace(tmp, dest)
+    except BaseException:
+        # Every failure path removes the partial file. dest is deliberately not
+        # touched: if a valid clip is already there, a failed refresh must not
+        # delete it.
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError as exc:
+            logger.warning("assets: could not remove partial %s: %s", tmp.name, exc)
+        raise
+
+    logger.info(
+        "assets: downloaded %s (%d bytes in %.1fs)",
+        dest.name, written, time.monotonic() - started,
+    )
 
 
 def _log_asset(video_id: int, asset: dict) -> None:

@@ -39,20 +39,12 @@
     "api_docs_url": "https://openrouter.ai/docs",
     "models": [
       {
-        "model_id": "openai/gpt-oss-120b",
+        "model_id": "meta-llama/llama-3.1-70b-instruct:free",
         "modality": [
           "text"
         ],
         "context_tokens": null,
-        "notes": "Active Groq-hosted model"
-      },
-      {
-        "model_id": "qwen/qwen3.8-27b",
-        "modality": [
-          "text"
-        ],
-        "context_tokens": null,
-        "notes": "Active as of last test"
+        "notes": "Corrected entry. This block previously listed openai/gpt-oss-120b and qwen/qwen3.8-27b, which are Groq models (openai/gpt-oss-120b is also declared under groq; qwen/qwen3.8-27b is llm.GROQ_FAST_MODEL). Neither was ever requested from OpenRouter. The model_id here is the one llm._openrouter() actually sends, so the registry now matches the request. Live availability is unverified: this environment has no outbound access to openrouter.ai."
       }
     ],
     "access_type": "free_tier",

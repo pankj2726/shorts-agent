@@ -46,3 +46,6 @@ _tmp*/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Runtime reliability state (provider health, circuit breakers, budget spend)
+.shorts_state/

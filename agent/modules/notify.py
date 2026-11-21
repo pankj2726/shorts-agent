@@ -78,6 +78,87 @@ def notify(
     _send_webhook(event, text, level)
 
 
+# ─── Telegram delivery shutdown ──────────────────────────────────────────────
+#
+# Telegram delivery is permanently disabled by explicit user decision. This is
+# stronger than the earlier video-only pause: no messages, no videos, no
+# notifications, and no automated delivery of any kind.
+#
+# The refusal is unconditional and deliberately NOT gated on an environment
+# variable. An env-gated prohibition can be reversed by a stray repository
+# variable, a workflow typo, or a default that quietly changes. This cannot be
+# reversed without editing this file, which is the point.
+#
+# The video guard below is retained even though it is now unreachable for
+# delivery: it stays as the fail-closed control should this function ever be
+# re-opened, and its tests still pin that behaviour.
+
+TELEGRAM_SHUTDOWN_REASON = (
+    "Telegram delivery is permanently disabled by project policy"
+)
+
+_blocked_sends: list[str] = []
+
+
+def telegram_delivery_enabled() -> bool:
+    """Always False. Exists so callers can ask rather than assume."""
+    return False
+
+
+def blocked_sends() -> list[str]:
+    """Events refused since process start, for diagnostics and tests."""
+    return list(_blocked_sends)
+
+
+# ─── Telegram video delivery guard ───────────────────────────────────────────
+#
+# Video delivery is paused by project directive. This is the server-side
+# prohibition: the refusal happens here, in the only function that can reach
+# the sendVideo endpoint, so no caller — pipeline, smoke test, command handler
+# or future API route — can send a video by calling notify() with a path.
+#
+# The switch fails closed. A missing, empty or unparseable value means paused,
+# so a blank injected by GitHub Actions cannot re-enable it, and the state
+# survives restarts and redeployments because it is read from the environment
+# on every call rather than cached at import time.
+
+VIDEO_DELIVERY_ENV = "SHORTS_TELEGRAM_VIDEO_ENABLED"
+
+_blocked_videos: list[str] = []
+
+
+def video_delivery_enabled() -> bool:
+    """Whether Telegram video delivery has been explicitly re-enabled."""
+    from agent.modules.config import env_bool
+
+    return env_bool(VIDEO_DELIVERY_ENV, False)
+
+
+def blocked_videos() -> list[str]:
+    """Video paths refused since process start, for tests and diagnostics."""
+    return list(_blocked_videos)
+
+
+def _guard_video_delivery(video_path: str | None) -> str | None:
+    """
+    Refuse a video attachment unless delivery is explicitly enabled.
+
+    Returns None when refused so the caller sends text only. Never raises: a
+    paused delivery must not take down a status notification.
+    """
+    if not video_path:
+        return None
+    if video_delivery_enabled():
+        return video_path
+    _blocked_videos.append(video_path)
+    logger.warning(
+        "notify: Telegram video delivery is paused (%s is not true); video %s "
+        "was NOT sent, falling back to text only",
+        VIDEO_DELIVERY_ENV, video_path,
+    )
+    return None
+
+
 # ─── Telegram ────────────────────────────────────────────────────────────────
 
 def _send_telegram(
@@ -87,6 +168,15 @@ def _send_telegram(
     buttons: list | None,
     video_path: str | None,
 ) -> None:
+    # Video guard first, then the total shutdown. Both run before the
+    # credential check, so every refusal is recorded even when Telegram is not
+    # configured at all.
+    video_path = _guard_video_delivery(video_path)
+
+    _blocked_sends.append(event)
+    logger.warning("notify: %s; %s was NOT sent", TELEGRAM_SHUTDOWN_REASON, event)
+    return
+
     token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
     chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
     if not token or not chat_id:

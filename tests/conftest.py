@@ -29,6 +29,27 @@ CREDENTIAL_VARS = [
     "YT_API_KEY", "YT_REFRESH_TOKEN", "DATABASE_URL",
 ]
 BEHAVIOUR_VARS = ["LLM_ROUTER", "ROUTER_MODALITY_POLICY", "DB_BACKEND"]
+# Per-task model selection is read from LLM_PROVIDER_<TASK> / LLM_MODEL_<TASK>
+# plus the two generic defaults. A developer who has any of these set locally
+# would otherwise change routing for the whole suite, so they are cleared too.
+BEHAVIOUR_VARS += [
+    "LLM_DEFAULT_PROVIDER", "LLM_DEFAULT_MODEL",
+    "LLM_PROVIDER_SCRIPTWRITING", "LLM_MODEL_SCRIPTWRITING",
+    "LLM_PROVIDER_CONTENT_ANALYSIS", "LLM_MODEL_CONTENT_ANALYSIS",
+    # Telegram video delivery is paused; a value left in the developer shell
+    # would silently re-enable it for the whole suite.
+    "SHORTS_TELEGRAM_VIDEO_ENABLED",
+    # Reliability and budget configuration. A value in the developer shell
+    # would otherwise change routing behaviour for the whole suite.
+    "SHORTS_HEALTH_STATE_PATH", "SHORTS_HEALTH_TTL_S",
+    "SHORTS_HEALTH_DEGRADED_AFTER", "SHORTS_HEALTH_UNHEALTHY_AFTER",
+    "SHORTS_CB_FAILURE_THRESHOLD", "SHORTS_CB_COOLDOWN_S",
+    "SHORTS_CB_HALF_OPEN_PROBES",
+    "SHORTS_BUDGET_STATE_PATH", "SHORTS_COST_CONFIG_PATH",
+    "SHORTS_BUDGET_UNKNOWN_POLICY", "SHORTS_BUDGET_MAX_PER_REQUEST",
+    "SHORTS_BUDGET_MAX_PER_TASK", "SHORTS_BUDGET_MAX_PERIOD",
+    "SHORTS_BUDGET_PERIOD_S",
+]
 
 
 @pytest.fixture(autouse=True)
@@ -48,8 +69,16 @@ def router(tmp_path, monkeypatch):
     reassigning them is effective. Restored automatically by monkeypatch.
     """
     from agent import router as router_mod
+    from agent.modules import budget, circuit_breaker, provider_health
 
     monkeypatch.setattr(router_mod, "QUOTA_PATH", tmp_path / "quota_tracker.json")
+    # Runtime health and budget persist to disk, and circuit breakers keep
+    # in-memory state. Without these the suite would write into the repo and
+    # one test's failures would leak into the next.
+    monkeypatch.setenv(provider_health.STATE_PATH_ENV,
+                       str(tmp_path / "provider_health.json"))
+    monkeypatch.setenv(budget.STATE_PATH_ENV, str(tmp_path / "budget.json"))
+    circuit_breaker.reset()
     monkeypatch.setattr(router_mod, "REGISTRY_PATH", tmp_path / "providers.json")
     # Point the decision log at tmp too so tests never append to the repo's log.
     monkeypatch.setattr(router_mod, "DECISION_LOG", tmp_path / "decisions.jsonl")

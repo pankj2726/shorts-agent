@@ -29,6 +29,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
+from agent.modules import budget, circuit_breaker, provider_errors, provider_health
 from agent.modules.config import env_bool
 
 logger = logging.getLogger(__name__)
@@ -548,6 +549,14 @@ _LLM_BACKENDS = {
     "openrouter": "_openrouter",
 }
 
+# Adapters implementing the uniform provider contract. Routing dispatches
+# through these; _LLM_BACKENDS is retained only for callers that still resolve
+# a backend by attribute name.
+def _adapters():
+    from agent.modules import providers
+
+    return providers.BY_NAME
+
 
 def _is_usable_completion(result: Any) -> tuple[bool, str]:
     """
@@ -569,6 +578,55 @@ def router_enabled() -> bool:
     return env_bool("LLM_ROUTER", False)
 
 
+def _env_key(task: str) -> str:
+    """Task name as it appears in an LLM_*_ variable."""
+    return "".join(c if c.isalnum() else "_" for c in task.upper())
+
+
+def resolve_provider_model(task: str) -> tuple[str | None, str | None]:
+    """
+    Env-driven provider and model selection for a task.
+
+    Task-specific variables win over the generic defaults:
+      LLM_PROVIDER_<TASK>, LLM_MODEL_<TASK>,
+      LLM_DEFAULT_PROVIDER, LLM_DEFAULT_MODEL
+
+    Returns (None, None) when nothing is configured, leaving the routing table
+    and registry to decide — the historical behaviour.
+    """
+    key = _env_key(task)
+    provider = (
+        os.environ.get(f"LLM_PROVIDER_{key}", "").strip()
+        or os.environ.get("LLM_DEFAULT_PROVIDER", "").strip()
+        or None
+    )
+    model = (
+        os.environ.get(f"LLM_MODEL_{key}", "").strip()
+        or os.environ.get("LLM_DEFAULT_MODEL", "").strip()
+        or None
+    )
+    return provider, model
+
+
+def model_is_pinned(task: str) -> bool:
+    """True when LLM_MODEL_<TASK> explicitly pins this task's model."""
+    return bool(os.environ.get(f"LLM_MODEL_{_env_key(task)}", "").strip())
+
+
+_LAST_EXECUTION: dict[str, Any] | None = None
+
+
+def last_execution() -> dict[str, Any] | None:
+    """
+    What the most recent routed completion actually did.
+
+    `provider_used`/`model_used` describe the request that succeeded, which is
+    not necessarily what was asked for. `model_used` comes from the provider's
+    own response, so a provider that quietly substituted a model is visible.
+    """
+    return _LAST_EXECUTION
+
+
 def complete(
     prompt: str,
     system: str | None = None,
@@ -579,33 +637,158 @@ def complete(
     """
     Route a completion through the registry, falling back in table order.
 
+    The selected model is now passed to the provider instead of being dropped:
+    previously route() computed a model and the backend re-read its own module
+    constant, so the selection never reached the request.
+
     Records every attempt against the quota tracker so later calls can see
     what a provider has already consumed today.
     """
     from agent.modules import llm  # local import: llm may import this module
 
     decision = route(task)
+    reg = registry_by_id()
+    env_provider, env_model = resolve_provider_model(task)
+
+    requested_provider = env_provider or decision.provider
+    if env_model:
+        requested_model = env_model
+    elif env_provider and env_provider != decision.provider:
+        # A provider was overridden but no model named: take that provider's own
+        # registry default. Using decision.model would carry over a model
+        # belonging to whichever provider the table picked first.
+        requested_model = _pick_model(reg.get(env_provider), task)
+    else:
+        requested_model = decision.model
+    pinned = model_is_pinned(task)
+    adapters = _adapters()
+
+    # Resolve a pinned model against a provider before any request goes out.
+    if pinned:
+        if env_provider:
+            # The provider was named too, so it has to declare the model.
+            adapter = adapters.get(env_provider)
+            if adapter is None or not adapter.supports_model(requested_model):
+                declared = (
+                    [m.model_id for m in adapter.declared_models()]
+                    if adapter is not None else []
+                )
+                raise RoutingError(
+                    f"LLM_MODEL_{_env_key(task)}={requested_model!r} is not "
+                    f"declared for {env_provider}; declared models are {declared}"
+                )
+            requested_provider = env_provider
+        else:
+            # Only the model was named: find a provider in this task's routing
+            # table that actually declares it. Rejecting here would make model
+            # selection unusable without also naming a provider.
+            match = [
+                p for p in ROUTING_TABLE.get(task, [])
+                if p in _LLM_BACKENDS
+                and adapters.get(p) is not None
+                and adapters[p].supports_model(requested_model)
+            ]
+            if not match:
+                raise RoutingError(
+                    f"LLM_MODEL_{_env_key(task)}={requested_model!r} is not "
+                    f"declared by any provider routed for {task!r}: "
+                    f"{ROUTING_TABLE.get(task, [])}"
+                )
+            requested_provider = match[0]
+            logger.info(
+                "router: %s implies provider %s for task %s",
+                requested_model, requested_provider, task,
+            )
+
     errors: list[str] = []
+    fallbacks: list[str] = []
 
     # Try the selected provider first, then the remaining eligible ones.
-    order = [decision.provider] + [
-        p for p in ROUTING_TABLE.get(task, []) if p not in (decision.provider,)
+    order = [requested_provider] + [
+        p for p in ROUTING_TABLE.get(task, []) if p not in (requested_provider,)
     ]
 
     for provider in order:
-        backend_name = _LLM_BACKENDS.get(provider)
-        if backend_name is None:
+        if provider not in _LLM_BACKENDS:
             continue
-        backend = getattr(llm, backend_name, None)
-        if backend is None:
-            errors.append(f"{provider}: no backend")
+        adapter = adapters.get(provider)
+        if adapter is None:
+            errors.append(f"{provider}: no adapter")
             continue
+
+        # Which model to ask this provider for. A generic default model is a
+        # preference, not a pin: a provider that does not declare it falls back
+        # to its own registry default, and that substitution is recorded.
+        model = requested_model
+        if model and not adapter.supports_model(model):
+            fallback_model = _pick_model(reg.get(provider), task)
+            fallbacks.append(
+                f"{provider}: {model} not declared, used {fallback_model}"
+            )
+            logger.warning(
+                "router: %s does not declare %s; falling back to %s",
+                provider, model, fallback_model,
+            )
+            model = fallback_model
+        if provider != requested_provider:
+            fallbacks.append(f"{provider}: used after {requested_provider}")
+
+        # Both scopes are consulted: a model-level breaker keeps one bad model
+        # id from taking the whole provider out of rotation, while the
+        # provider-level one covers an outage that affects everything on it.
+        scopes = [provider] + ([f"{provider}/{model}"] if model else [])
+        breakers = [circuit_breaker.get(scope) for scope in scopes]
+
+        # Runtime health. Unknown is allowed: absent evidence is not evidence
+        # of failure, and refusing it would leave nothing routable at startup.
+        healthy, health_reason = provider_health.is_available(provider)
+        if not healthy:
+            errors.append(f"{provider}: {health_reason}")
+            fallbacks.append(f"{provider}: skipped, {health_reason}")
+            logger.warning("router: skipping %s (%s)", provider, health_reason)
+            continue
+
+        admitted, breaker_reason = True, ""
+        for breaker in breakers:
+            admitted, breaker_reason = breaker.allow()
+            if not admitted:
+                break
+        if not admitted:
+            errors.append(f"{provider}: breaker {breaker_reason}")
+            fallbacks.append(f"{provider}: skipped, breaker {breaker_reason}")
+            logger.warning("router: skipping %s (breaker %s)", provider, breaker_reason)
+            continue
+
+        # Budget is reserved before dispatch, so the ceiling is checked against
+        # a cost that is already held rather than one that might be.
         try:
-            result = backend(prompt, system, temperature, max_tokens)
+            reservation = budget.reserve(provider, model, task, prompt, max_tokens)
+        except budget.BudgetExceededError as exc:
+            errors.append(f"{provider}: {exc.reason}")
+            fallbacks.append(f"{provider}: skipped, {exc.reason}")
+            logger.warning("router: skipping %s (budget: %s)", provider, exc.reason)
+            continue
+
+        try:
+            result = adapter._call(prompt, system, temperature, max_tokens, model)
         except Exception as exc:  # noqa: BLE001 - provider errors are expected
-            errors.append(f"{provider}: {type(exc).__name__}")
-            record_request(provider, error=f"{type(exc).__name__}: {exc}"[:200])
-            logger.warning("router: %s failed (%s), trying next", provider, exc)
+            err = provider_errors.classify_exception(provider, exc)
+            errors.append(f"{provider}: {err.category}")
+            fallbacks.append(f"{provider}: {err.category}")
+            # Category first for stable machine reading, then the exception
+            # class, so nothing that parsed the old format loses information.
+            record_request(
+                provider,
+                error=f"{err.category} ({type(exc).__name__}): {err.detail}"[:200],
+            )
+            provider_health.record_failure(provider, err.category, err.detail)
+            for breaker in breakers:
+                breaker.record_failure(err.category)
+            budget.release(reservation)
+            logger.warning(
+                "router: %s failed [%s%s], trying next", provider, err.category,
+                "" if err.retryable else ", not retryable",
+            )
             continue
 
         # A 200 with an empty body is still a failure. Without this check an
@@ -614,16 +797,52 @@ def complete(
         usable, why = _is_usable_completion(result)
         if not usable:
             errors.append(f"{provider}: {why}")
+            fallbacks.append(f"{provider}: {why}")
             record_request(provider, error=why[:200])
+            provider_health.record_failure(provider, "malformed_response", why)
+            for breaker in breakers:
+                breaker.record_failure("malformed_response")
+            budget.release(reservation)
             logger.warning(
                 "router: %s returned an unusable response (%s), trying next",
                 provider, why,
             )
             continue
 
-        # Pass `task` so the tracker names the model actually used for it; a
-        # multi-model provider would otherwise be logged with models[0].
-        record_request(provider, model=_pick_model(registry_by_id().get(provider), task))
+        usage = adapter.last_usage()
+        actual_cost = budget.cost_from_usage(provider, model, usage)
+        budget.settle(reservation, actual=actual_cost, usage=usage or {},
+                      outcome="ok")
+        provider_health.record_success(provider)
+        for breaker in breakers:
+            breaker.record_success()
+
+        # Record the model the provider actually answered with, not the one we
+        # asked for. Falls back to the request when the provider does not
+        # report one, so the field is never silently empty.
+        model_used = adapter.last_model() or model
+        global _LAST_EXECUTION
+        _LAST_EXECUTION = {
+            "task": task,
+            "requested_provider": requested_provider,
+            "requested_model": requested_model,
+            "provider_used": provider,
+            "model_requested": model,
+            "model_used": model_used,
+            "model_substituted": bool(model_used != requested_model),
+            "fallbacks": fallbacks,
+            "cost_estimated": reservation.estimated,
+            "cost_actual": reservation.actual,
+            "usage": usage or {},
+            "at": datetime.now(UTC).isoformat(timespec="seconds"),
+        }
+        logger.info(
+            "router: %s served %s with %s (requested %s/%s)%s",
+            task, provider, model_used, requested_provider, requested_model,
+            f"; fallbacks: {fallbacks}" if fallbacks else "",
+        )
+
+        record_request(provider, model=model_used)
         return result
 
     raise llm.LLMError("router: all eligible providers failed: " + "; ".join(errors))
