@@ -78,6 +78,38 @@ def notify(
     _send_webhook(event, text, level)
 
 
+# ─── Telegram delivery shutdown ──────────────────────────────────────────────
+#
+# Telegram delivery is permanently disabled by explicit user decision. This is
+# stronger than the earlier video-only pause: no messages, no videos, no
+# notifications, and no automated delivery of any kind.
+#
+# The refusal is unconditional and deliberately NOT gated on an environment
+# variable. An env-gated prohibition can be reversed by a stray repository
+# variable, a workflow typo, or a default that quietly changes. This cannot be
+# reversed without editing this file, which is the point.
+#
+# The video guard below is retained even though it is now unreachable for
+# delivery: it stays as the fail-closed control should this function ever be
+# re-opened, and its tests still pin that behaviour.
+
+TELEGRAM_SHUTDOWN_REASON = (
+    "Telegram delivery is permanently disabled by project policy"
+)
+
+_blocked_sends: list[str] = []
+
+
+def telegram_delivery_enabled() -> bool:
+    """Always False. Exists so callers can ask rather than assume."""
+    return False
+
+
+def blocked_sends() -> list[str]:
+    """Events refused since process start, for diagnostics and tests."""
+    return list(_blocked_sends)
+
+
 # ─── Telegram video delivery guard ───────────────────────────────────────────
 #
 # Video delivery is paused by project directive. This is the server-side
@@ -89,8 +121,6 @@ def notify(
 # so a blank injected by GitHub Actions cannot re-enable it, and the state
 # survives restarts and redeployments because it is read from the environment
 # on every call rather than cached at import time.
-#
-# Text notifications are deliberately unaffected.
 
 VIDEO_DELIVERY_ENV = "SHORTS_TELEGRAM_VIDEO_ENABLED"
 
@@ -138,9 +168,14 @@ def _send_telegram(
     buttons: list | None,
     video_path: str | None,
 ) -> None:
-    # Enforced before anything else, including the credential check, so the
-    # refusal is recorded even when Telegram is not configured at all.
+    # Video guard first, then the total shutdown. Both run before the
+    # credential check, so every refusal is recorded even when Telegram is not
+    # configured at all.
     video_path = _guard_video_delivery(video_path)
+
+    _blocked_sends.append(event)
+    logger.warning("notify: %s; %s was NOT sent", TELEGRAM_SHUTDOWN_REASON, event)
+    return
 
     token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
     chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")

@@ -1,13 +1,15 @@
 """
-Telegram video delivery guard.
+Telegram delivery shutdown.
 
-Video delivery is paused by project directive. These tests verify the refusal
-happens at the server boundary — the one function that can reach the sendVideo
-endpoint — rather than depending on callers to remember not to pass a path.
+Delivery is permanently disabled by project policy. These tests pin the two
+properties that make that meaningful:
 
-The critical assertion in each "blocked" test is that no request is made to
-sendVideo. A guard that logged a warning and sent the video anyway would pass
-every check that only looked at the log.
+* Nothing reaches api.telegram.org — not video, not text, not buttons. Each
+  test asserts on the requests actually attempted, because a guard that logged
+  a warning and sent anyway would pass any check that only read the log.
+* No environment variable can reverse it. The refusal is unconditional in
+  code, so there is no configuration to flip. The tests set every variable
+  that used to matter and assert delivery still does not happen.
 """
 from __future__ import annotations
 
@@ -17,17 +19,17 @@ from agent.modules import notify
 
 
 @pytest.fixture(autouse=True)
-def _reset_guard():
+def _reset():
+    notify._blocked_sends.clear()
     notify._blocked_videos.clear()
     yield
+    notify._blocked_sends.clear()
     notify._blocked_videos.clear()
 
 
 @pytest.fixture
-def telegram(monkeypatch):
-    """Telegram configured, rate limiter disabled, requests captured."""
-    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token-not-real")
-    monkeypatch.setenv("TELEGRAM_CHAT_ID", "12345")
+def attempts(monkeypatch):
+    """Capture every HTTP request notify() would make."""
     monkeypatch.setattr(notify, "_rate_limit", lambda: None)
     sent = []
 
@@ -47,127 +49,187 @@ def telegram(monkeypatch):
 
 
 @pytest.fixture
+def configured(monkeypatch):
+    """Telegram fully configured, and every legacy switch turned on."""
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token-not-real")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "12345")
+    monkeypatch.setenv("WEBHOOK_URL", "https://example.invalid/hook")
+    monkeypatch.setenv(notify.VIDEO_DELIVERY_ENV, "true")
+    return True
+
+
+@pytest.fixture
 def video(tmp_path):
     path = tmp_path / "short.mp4"
     path.write_bytes(b"x" * 1024)
     return str(path)
 
 
-def _endpoints(sent):
-    return [u.rsplit("/", 1)[-1] for u in sent]
+def _telegram_calls(sent):
+    return [u for u in sent if "api.telegram.org" in u]
 
 
-# ─── Fails closed ────────────────────────────────────────────────────────────
+# ─── Nothing is delivered ────────────────────────────────────────────────────
 
-def test_video_is_blocked_by_default(telegram, video, monkeypatch):
+def test_no_text_is_sent(attempts, configured):
+    notify.notify("PIPELINE_ONLINE", "status text")
+    assert _telegram_calls(attempts) == []
+
+
+def test_no_video_is_sent(attempts, configured, video):
+    notify.notify("RENDER_DONE", "status text", video_path=video)
+    assert _telegram_calls(attempts) == []
+
+
+def test_no_button_prompt_is_sent(attempts, configured):
+    notify.notify("RENDER_DONE", "approve?",
+                  buttons=[[("Approve", "approve:1"), ("Reject", "reject:1")]])
+    assert _telegram_calls(attempts) == []
+
+
+def test_refusals_are_recorded(attempts, configured, video):
+    notify.notify("RENDER_DONE", "text", video_path=video)
+    notify.notify("PIPELINE_ONLINE", "text")
+
+    assert notify.blocked_sends() == ["RENDER_DONE", "PIPELINE_ONLINE"]
+    # The video switch is on in this fixture, so the video guard let the path
+    # through and the total shutdown stopped it. Recording it as a video block
+    # would misattribute which control fired.
+    assert notify.blocked_videos() == []
+
+
+def test_both_controls_record_when_the_video_switch_is_off(attempts, monkeypatch, video):
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token-not-real")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "12345")
     monkeypatch.delenv(notify.VIDEO_DELIVERY_ENV, raising=False)
 
-    notify.notify("TEST_EVENT", "status text", video_path=video)
+    notify.notify("RENDER_DONE", "text", video_path=video)
 
-    assert "sendVideo" not in _endpoints(telegram)
     assert notify.blocked_videos() == [video]
+    assert notify.blocked_sends() == ["RENDER_DONE"]
+    assert _telegram_calls(attempts) == []
 
 
-@pytest.mark.parametrize("value", ["", "   ", "false", "False", "0", "no", "off",
-                                   "maybe", "TRUEISH", "enabled"])
-def test_only_an_explicit_true_enables_delivery(telegram, video, monkeypatch, value):
-    """A blank from CI, or anything unrecognised, must leave delivery paused."""
-    monkeypatch.setenv(notify.VIDEO_DELIVERY_ENV, value)
-
-    notify.notify("TEST_EVENT", "status text", video_path=video)
-
-    assert "sendVideo" not in _endpoints(telegram)
-    assert notify.video_delivery_enabled() is False
+def test_delivery_is_reported_as_disabled():
+    assert notify.telegram_delivery_enabled() is False
 
 
-@pytest.mark.parametrize("value", ["true", "TRUE", "1", "yes", "on"])
-def test_explicit_true_re_enables_delivery(telegram, video, monkeypatch, value):
-    monkeypatch.setenv(notify.VIDEO_DELIVERY_ENV, value)
+def test_no_configuration_variable_can_re_enable_delivery(attempts, monkeypatch, video):
+    """
+    The refusal is unconditional in code. Every variable that used to gate
+    delivery is set to its most permissive value and delivery still stops.
+    """
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token-not-real")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "12345")
+    monkeypatch.setenv(notify.VIDEO_DELIVERY_ENV, "true")
+    monkeypatch.setenv("TELEGRAM_ENABLED", "true")
+    monkeypatch.setenv("NOTIFY_ENABLED", "true")
+    monkeypatch.setenv("PAUSE_PUBLISHING", "false")
 
-    notify.notify("TEST_EVENT", "status text", video_path=video)
+    notify.notify("RENDER_DONE", "text", video_path=video,
+                  buttons=[[("Approve", "approve:1")]])
 
-    assert "sendVideo" in _endpoints(telegram)
-    assert notify.blocked_videos() == []
-
-
-# ─── Text is unaffected ──────────────────────────────────────────────────────
-
-def test_text_notification_still_sent_while_video_is_paused(telegram, video, monkeypatch):
-    monkeypatch.delenv(notify.VIDEO_DELIVERY_ENV, raising=False)
-
-    notify.notify("TEST_EVENT", "status text", video_path=video)
-
-    assert "sendMessage" in _endpoints(telegram)
+    assert _telegram_calls(attempts) == []
 
 
-def test_plain_notification_is_untouched_by_the_guard(telegram, monkeypatch):
-    monkeypatch.delenv(notify.VIDEO_DELIVERY_ENV, raising=False)
-
-    notify.notify("TEST_EVENT", "status text")
-
-    assert "sendMessage" in _endpoints(telegram)
-    assert notify.blocked_videos() == []
-
-
-def test_guard_applies_even_without_telegram_configured(video, monkeypatch):
-    """The refusal must be recorded even when no send could have happened."""
+def test_send_attempted_even_without_credentials_is_refused(attempts, video, monkeypatch):
     monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
     monkeypatch.delenv("TELEGRAM_CHAT_ID", raising=False)
+
+    notify.notify("RENDER_DONE", "text", video_path=video)
+
+    assert _telegram_calls(attempts) == []
+    assert notify.blocked_sends() == ["RENDER_DONE"]
+
+
+# ─── The video guard is retained ─────────────────────────────────────────────
+
+def test_video_guard_still_fails_closed(monkeypatch, video):
+    """
+    Preserved even though total shutdown makes it unreachable for delivery: it
+    is the control that would apply if sending were ever re-opened.
+    """
     monkeypatch.delenv(notify.VIDEO_DELIVERY_ENV, raising=False)
-
-    notify.notify("TEST_EVENT", "status text", video_path=video)
-
+    assert notify._guard_video_delivery(video) is None
     assert notify.blocked_videos() == [video]
+
+
+def test_video_guard_passes_through_only_when_explicitly_enabled(monkeypatch, video):
+    monkeypatch.setenv(notify.VIDEO_DELIVERY_ENV, "true")
+    assert notify._guard_video_delivery(video) == video
+
+
+def test_video_guard_still_refuses_a_blank_value(monkeypatch, video):
+    """A blank injected by CI must not re-enable it."""
+    monkeypatch.setenv(notify.VIDEO_DELIVERY_ENV, "")
+    assert notify._guard_video_delivery(video) is None
+
+
+# ─── Non-Telegram paths are untouched ────────────────────────────────────────
+
+def test_webhook_is_not_telegram_and_still_works(attempts, monkeypatch):
+    monkeypatch.setenv("WEBHOOK_URL", "https://example.invalid/hook")
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+
+    notify.notify("PIPELINE_ONLINE", "status text")
+
+    assert [u for u in attempts if "example.invalid" in u]
+    assert _telegram_calls(attempts) == []
 
 
 # ─── Never raises ────────────────────────────────────────────────────────────
 
-def test_guard_does_not_raise_on_a_missing_file(monkeypatch):
-    monkeypatch.delenv(notify.VIDEO_DELIVERY_ENV, raising=False)
-
-    notify.notify("TEST_EVENT", "text", video_path="/nonexistent/clip.mp4")
-
-    assert notify.blocked_videos() == ["/nonexistent/clip.mp4"]
+def test_notify_does_not_raise(attempts, configured, video):
+    notify.notify("RENDER_DONE", "text", video_path=video,
+                  buttons=[[("Approve", "approve:1")]])
 
 
-def test_guard_does_not_raise_when_send_fails(monkeypatch, video):
+def test_notify_does_not_raise_when_the_network_fails(monkeypatch, video):
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "t")
-    monkeypatch.setenv("TELEGRAM_CHAT_ID", "1")
+    monkeypatch.setenv("WEBHOOK_URL", "https://example.invalid/hook")
     monkeypatch.setattr(notify, "_rate_limit", lambda: None)
-    monkeypatch.delenv(notify.VIDEO_DELIVERY_ENV, raising=False)
 
     def boom(*a, **k):
         raise RuntimeError("network down")
 
     monkeypatch.setattr(notify.requests, "post", boom)
 
-    notify.notify("TEST_EVENT", "text", video_path=video)  # must not raise
+    notify.notify("RENDER_DONE", "text", video_path=video)
 
 
-# ─── Interaction with the existing size limit ────────────────────────────────
+# ─── Approval cannot be obtained through a dead channel ──────────────────────
 
-def test_oversize_video_still_falls_back_to_text_when_enabled(
-    telegram, tmp_path, monkeypatch,
-):
-    monkeypatch.setenv(notify.VIDEO_DELIVERY_ENV, "true")
-    big = tmp_path / "big.mp4"
-    big.write_bytes(b"x" * (51 * 1024 * 1024))
+def test_approval_waits_fail_closed_immediately():
+    """
+    Approval had exactly one channel. Polling it for two hours and then
+    proceeding on timeout would be the opposite of an approval gate, so the
+    wait now refuses at once.
+    """
+    import time
 
-    notify.notify("TEST_EVENT", "text", video_path=str(big))
+    from agent.main import _wait_for_approval
 
-    assert "sendVideo" not in _endpoints(telegram)
-    assert "sendMessage" in _endpoints(telegram)
-    # Refused by the size limit, not by the pause, so it is not double-counted.
-    assert notify.blocked_videos() == []
+    started = time.monotonic()
+    with pytest.raises(RuntimeError) as exc:
+        _wait_for_approval(1, "/tmp/clip.mp4", {"title": "t", "hook": "h"})
+
+    assert "approval unavailable" in str(exc.value)
+    assert time.monotonic() - started < 1.0, "the wait did not fail closed"
+
+
+def test_smoke_test_cannot_reach_telegram(attempts, configured):
+    """The smoke path notifies on start; that must not leave the process."""
+    notify.notify("PIPELINE_ONLINE", "Smoke test started", level="info")
+    assert _telegram_calls(attempts) == []
 
 
 # ─── No credential leakage ───────────────────────────────────────────────────
 
-def test_block_log_carries_no_token(telegram, video, monkeypatch, caplog):
+def test_refusal_log_carries_no_token(attempts, monkeypatch, caplog):
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "leakable-token-value-77")
-    monkeypatch.delenv(notify.VIDEO_DELIVERY_ENV, raising=False)
 
     with caplog.at_level("WARNING", logger="agent.modules.notify"):
-        notify.notify("TEST_EVENT", "text", video_path=video)
+        notify.notify("PIPELINE_ONLINE", "text")
 
     assert "leakable-token-value-77" not in caplog.text
+    assert "api.telegram.org" not in caplog.text

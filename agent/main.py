@@ -189,7 +189,25 @@ def run_pipeline() -> None:
 
 
 def _wait_for_approval(video_id: int, video_path: str, script: dict) -> None:
-    """Poll Telegram for approval/rejection for up to 2 hours."""
+    """
+    Wait for a human to approve or reject a render.
+
+    Telegram was the only approval channel and its delivery is permanently
+    disabled, so approval cannot currently be granted at all. This fails closed
+    and immediately: polling a dead channel for the original two hours would
+    burn the job timeout and then proceed on a timeout rather than on a
+    decision, which is the opposite of an approval gate.
+
+    The polling implementation below is retained unchanged for when a
+    replacement approval channel exists. It is unreachable until this guard is
+    deliberately removed.
+    """
+    raise RuntimeError(
+        "approval unavailable: Telegram delivery is permanently disabled and no "
+        "replacement approval channel is configured; refusing to proceed with "
+        f"video_id={video_id}"
+    )
+
     from agent.modules.notify import notify, poll_updates, answer_callback
 
     notify(
