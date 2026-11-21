@@ -506,3 +506,148 @@ def test_approval_readiness_never_blocks_preflight(monkeypatch):
     assert report["publish_approval"]["can_grant"] is False
     for item in report["blocking"]:
         assert "approval" not in item.lower()
+
+
+# ─── a refused publish must not be recorded as a successful run ──────────────
+
+
+def test_refused_publish_is_not_recorded_as_done(monkeypatch, tmp_path):
+    """
+    The pipeline used to mark the run 'done' with yt_id=None.
+
+    upload_short() correctly refused and returned None, but run_pipeline fell
+    straight through to UPDATE runs SET status='done'. A run that produced a
+    video nobody approved therefore read as a success — the same misreporting
+    the approval gate fixed, inverted.
+
+    This drives the real run_pipeline() end to end with every stage stubbed to
+    succeed, so it exercises the shipped code path rather than a copy of it.
+    """
+    from agent import main as agent_main
+    from agent.modules import (
+        assets,
+        db,
+        notify,
+        qa,
+        render,
+        research,
+        strategy,
+        tts,
+    )
+    from agent.modules import (
+        script as script_mod,
+    )
+
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "db.sqlite")
+    recorded: list[tuple[str, tuple]] = []
+
+    class _Conn:
+        lastrowid = 7
+
+        def execute(self, sql, params=()):
+            recorded.append((sql, params))
+            return self
+
+        def commit(self):
+            pass
+
+        def close(self):
+            pass
+
+        def fetchone(self):
+            return None
+
+    monkeypatch.setattr(db, "get_conn", lambda: _Conn())
+
+    # Every stage succeeds, so the pipeline reaches the publish step.
+    monkeypatch.setattr(research, "run_research", lambda: {"topics": ["x"]})
+    monkeypatch.setattr(strategy, "run_strategy", lambda _r: {"idea": "an idea"})
+    monkeypatch.setattr(script_mod, "run_script",
+                        lambda _i: {"video_id": 42, "title": "T", "description": "D",
+                                    "script": "S", "tags": ["a"], "scene_list": []})
+    monkeypatch.setattr(tts, "generate_voiceover",
+                        lambda *a, **k: {"audio_path": str(tmp_path / "v.mp3"),
+                                         "duration": 30.0})
+    monkeypatch.setattr(assets, "fetch_stock_clips", lambda *a, **k: [])
+    monkeypatch.setattr(assets, "pick_music", lambda *a, **k: None)
+    monkeypatch.setattr(render, "render_short",
+                        lambda *a, **k: {"video_path": str(tmp_path / "clip.mp4"),
+                                         "duration": 30.0})
+    monkeypatch.setattr(qa, "check_render", lambda _r: {"passed": True, "reason": ""})
+
+    # The refusal under test: publishing is attempted and denied.
+    refused: dict = {}
+
+    def _refuse(**kwargs):
+        refused.update(kwargs)
+
+    monkeypatch.setattr(publish, "upload_short", _refuse)
+
+    calls: list[str] = []
+    monkeypatch.setattr(notify, "notify",
+                        lambda kind, *_a, **_k: calls.append(kind))
+
+    # No approval configured, so the real upload_short would refuse. Stubbed
+    # above to the same effect; the assertion below is on what gets recorded.
+    monkeypatch.setenv("APPROVAL_REQUIRED", "false")
+
+    agent_main.run_pipeline()  # must not raise, must not exit
+
+    assert refused, "upload_short was never attempted"
+    assert refused["video_id"] == 42
+
+    updates = [(sql, params) for sql, params in recorded if "UPDATE runs" in sql]
+    assert updates, "the run was never finalised"
+
+    final_sql, final_params = updates[-1]
+    assert "'blocked'" in final_sql, (
+        f"a refused publish was recorded as something other than blocked: {final_sql}"
+    )
+    assert "'done'" not in final_sql
+    assert "refused" in str(final_params[1]).lower()
+
+    # The operator must be told, not left to find it in the runs table.
+    assert "PIPELINE_BLOCKED" in calls
+    # And nothing may be routed to Telegram for manual scheduling.
+    assert "RENDER_DONE" not in calls
+
+
+def test_pipeline_source_marks_a_refused_publish_blocked_not_done():
+    """
+    Guard the source itself.
+
+    The behavioural test above can only exercise the branch in isolation; this
+    pins the actual code path in run_pipeline so the misreporting cannot be
+    reintroduced without a test failing.
+    """
+    from pathlib import Path
+
+    src = (Path(__file__).resolve().parent.parent / "agent" / "main.py").read_text()
+
+    # The refusal branch must set blocked, and must come before the done update.
+    blocked_at = src.find("status='blocked', finished_at=?")
+    done_at = src.find("UPDATE runs SET status='done'")
+    assert blocked_at != -1, "no blocked update in run_pipeline"
+    assert done_at != -1, "no done update in run_pipeline"
+    assert blocked_at < done_at, "blocked branch must precede the done branch"
+
+    # The done update must be unreachable when yt_id is falsy.
+    assert "if not yt_id:" in src
+    assert "return" in src[blocked_at:done_at], "refusal branch must return"
+
+
+def test_pipeline_no_longer_routes_a_refusal_to_telegram():
+    """
+    The old fallback sent the MP4 to Telegram for manual scheduling.
+
+    Telegram delivery is permanently disabled, so that call could never reach
+    anyone — keeping it would mean routing around a missing approval mechanism
+    rather than respecting it. It is no longer called from the pipeline.
+    """
+    from pathlib import Path
+
+    src = (Path(__file__).resolve().parent.parent / "agent" / "main.py").read_text()
+
+    assert "send_for_manual_review(" not in src.replace(
+        "# The previous fallback here was send_for_manual_review(), which", "")
+    assert "from agent.modules.publish import upload_short, send_for_manual_review" not in src

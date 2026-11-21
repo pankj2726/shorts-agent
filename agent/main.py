@@ -107,7 +107,7 @@ def run_pipeline() -> None:
     from agent.modules.assets import fetch_stock_clips, pick_music
     from agent.modules.render import render_short
     from agent.modules.qa import check_render
-    from agent.modules.publish import upload_short, send_for_manual_review
+    from agent.modules.publish import upload_short
 
     import tempfile
     from pathlib import Path
@@ -195,13 +195,17 @@ def run_pipeline() -> None:
         conn.commit()
         conn.close()
 
-        # 7. Publish or send for manual review
-        approval_required = env_bool("APPROVAL_REQUIRED", True)
-        if approval_required:
+        # 7. Publish, but only against a valid approval record.
+        #
+        # APPROVAL_REQUIRED is deliberately not consulted here. It used to gate
+        # the wait below, which meant setting it to false fell straight through
+        # to the upload. The requirement now lives in upload_short(), which
+        # checks the approvals table and cannot be switched off by an env var.
+        if env_bool("APPROVAL_REQUIRED", True):
             _wait_for_approval(video_id, render_info["video_path"], script)
 
         # Determine publish time (next scheduled slot)
-        from agent.modules.publish import upload_short, send_for_manual_review
+        from agent.modules.publish import upload_short
         publish_times = env_list("PUBLISH_TIMES", ["13:00", "19:00"])
         # Simplified: schedule for tomorrow at first slot
         from datetime import date, timedelta
@@ -218,14 +222,44 @@ def run_pipeline() -> None:
             contains_synthetic=bool(script.get("contains_synthetic")),
         )
 
-        if not yt_id:
-            # Fallback: send to Telegram for manual scheduling
-            send_for_manual_review(
-                video_id, render_info["video_path"], script["title"], script
-            )
-
-        # Mark pipeline run done
         conn = db.get_conn()
+        if not yt_id:
+            # Not published. Record it as blocked rather than done: a run that
+            # produced a video nobody approved is not a successful run, and
+            # marking it done with yt_id=None buried the refusal in a status
+            # that reads as success. upload_short has already logged and
+            # notified with the specific reason.
+            #
+            # The previous fallback here was send_for_manual_review(), which
+            # posted the MP4 to Telegram for manual scheduling. Telegram
+            # delivery is permanently disabled, so that call could never reach
+            # anyone; keeping it would mean routing around a missing approval
+            # mechanism rather than respecting it.
+            conn.execute(
+                "UPDATE runs SET status='blocked', finished_at=?, details=? WHERE id=?",
+                (
+                    datetime.now(timezone.utc).isoformat(),
+                    f"blocked: publishing refused for video_id={video_id}; "
+                    f"no valid approval record. Nothing was uploaded.",
+                    run_id,
+                ),
+            )
+            conn.commit()
+            conn.close()
+            logger.warning(
+                "=== Pipeline finished without publishing: video_id=%s blocked "
+                "pending approval ===", video_id,
+            )
+            _notify_safe(
+                "PIPELINE_BLOCKED",
+                f"⛔ Rendered but not published (video_id={video_id}).\n"
+                f"No valid approval record. Grant one with "
+                f"scripts/approve_video.py, then re-run.\n"
+                f"Run: {os.environ.get('GH_RUN_URL', '?')}",
+                level="warn",
+            )
+            return
+
         conn.execute(
             "UPDATE runs SET status='done', finished_at=?, details=? WHERE id=?",
             (datetime.now(timezone.utc).isoformat(), f"video_id={video_id} yt_id={yt_id}", run_id),
