@@ -103,17 +103,38 @@ def test_gate_allows_when_approval_is_not_required(monkeypatch, value):
     assert reason == "approval not required"
 
 
-def test_gate_follows_the_notification_module_not_a_constant(monkeypatch):
+def test_re_enabling_telegram_does_not_reopen_the_gate(monkeypatch):
     """
-    Derived from notify.telegram_delivery_enabled(), so wiring up a real
-    channel updates this instead of leaving a stale hardcoded False.
+    Telegram must never become the implicit approval mechanism again.
+
+    This used to be derived from notify.telegram_delivery_enabled(), which
+    failed open: the moment anything made that return True, the pipeline gate
+    reopened silently and the approval requirement rode on Telegram delivery.
+    Availability now comes from a provider-neutral registry that Telegram is
+    deliberately not part of.
     """
     from agent.modules import notify
 
     monkeypatch.setattr(notify, "telegram_delivery_enabled", lambda: True)
+
+    available, detail = agent_main.approval_channel_available()
+    assert available is False, "Telegram delivery re-opened the approval gate"
+    assert "permanently disabled" in detail
+    assert agent_main.approval_gate()[0] is False
+
+
+def test_gate_follows_the_neutral_registry_not_a_single_provider(monkeypatch):
+    """
+    Adding a real channel must be additive, without main.py learning about any
+    particular provider.
+    """
+    from agent.modules import approvals
+
+    monkeypatch.setattr(approvals, "delivery_channels", lambda: ["web", "android"])
+
     available, detail = agent_main.approval_channel_available()
     assert available is True
-    assert detail == "telegram"
+    assert "web" in detail and "android" in detail
     assert agent_main.approval_gate()[0] is True
 
 
@@ -210,9 +231,9 @@ def test_wait_for_approval_does_not_claim_success_without_an_implementation(monk
     If a channel is ever reported available but no implementation exists for it,
     that must be an error rather than a silent pass.
     """
-    from agent.modules import notify
+    from agent.modules import approvals
 
-    monkeypatch.setattr(notify, "telegram_delivery_enabled", lambda: True)
+    monkeypatch.setattr(approvals, "delivery_channels", lambda: ["web"])
 
     with pytest.raises(RuntimeError) as exc:
         agent_main._wait_for_approval(1, "/tmp/clip.mp4", {"title": "t", "hook": "h"})

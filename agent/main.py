@@ -63,19 +63,26 @@ def approval_channel_available() -> tuple[bool, str]:
     """
     Whether a human can actually grant approval right now.
 
-    Telegram was the only approval channel and its delivery is permanently
-    disabled, so this is False until a replacement exists. It is derived from
-    the notification module rather than hardcoded, so wiring up a new channel
-    updates this instead of leaving a stale constant that claims approval is
-    impossible.
-    """
-    from agent.modules.notify import telegram_delivery_enabled
+    Derived from approvals.delivery_channels() — the provider-neutral registry
+    of channels that can deliver a request and receive a decision. That list is
+    empty until P4 adds real ones, so this is False for now.
 
-    if telegram_delivery_enabled():
-        return True, "telegram"
+    It deliberately does not consult Telegram, not even to check that delivery
+    is disabled. Deriving availability from Telegram was how it became the
+    implicit approval mechanism in the first place, and it failed open: the
+    moment anything made telegram_delivery_enabled() return True, the pipeline
+    gate reopened silently. Asking a neutral registry instead means adding a
+    channel is additive and no single provider can flip this.
+    """
+    from agent.modules import approvals
+
+    channels = approvals.delivery_channels()
+    if channels:
+        return True, ", ".join(channels)
     return False, (
-        "approval channel unavailable: Telegram delivery is permanently "
-        "disabled and no replacement channel is configured"
+        "approval channel unavailable: no channel is registered that can "
+        "deliver an approval request and receive a decision. Telegram is "
+        "permanently disabled and is deliberately not a candidate."
     )
 
 

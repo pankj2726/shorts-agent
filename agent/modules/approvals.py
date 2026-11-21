@@ -65,6 +65,25 @@ def approvers() -> list[str]:
     return [a.strip() for a in env_list("SHORTS_APPROVER_ALLOWLIST", []) if a.strip()]
 
 
+def delivery_channels() -> list[str]:
+    """
+    Channels that can both deliver an approval request and receive a decision.
+
+    This is the provider-neutral source of truth for whether approval is
+    possible at all. It is deliberately empty: no such channel exists yet.
+
+    Telegram is not in this list and must not be added. Its delivery is
+    permanently disabled, and it was the implicit approval mechanism whose
+    removal this whole design exists to enforce. Deriving availability from
+    Telegram — even as a negative check — means anyone who re-enables delivery
+    silently reopens the pipeline gate.
+
+    P4 should append real channels here (web, Android) rather than teaching
+    main.py about any particular provider.
+    """
+    return []
+
+
 def ttl_seconds() -> int:
     """Approval lifetime, clamped so a huge value cannot make one permanent."""
     return max(60, min(env_int("SHORTS_APPROVAL_TTL_S", DEFAULT_TTL_S), MAX_TTL_S))
