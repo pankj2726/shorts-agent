@@ -312,11 +312,34 @@ CREATE INDEX IF NOT EXISTS comments_yt_id_idx   ON shorts.comments (yt_video_id)
 CREATE INDEX IF NOT EXISTS quota_log_day_idx    ON shorts.quota_log (day);
 CREATE INDEX IF NOT EXISTS runs_started_idx     ON shorts.runs (started_at);
 CREATE INDEX IF NOT EXISTS approvals_video_idx  ON shorts.approvals (video_id);
+
+-- P4.1: record authentication and single-use consumption. ADD COLUMN IF NOT
+-- EXISTS is native to Postgres, so an already-migrated database gains these
+-- without a rewrite. All four are nullable and additive: nothing is dropped,
+-- re-typed or back-filled destructively.
+ALTER TABLE shorts.approvals ADD COLUMN IF NOT EXISTS signature   TEXT;
+ALTER TABLE shorts.approvals ADD COLUMN IF NOT EXISTS nonce       TEXT;
+ALTER TABLE shorts.approvals ADD COLUMN IF NOT EXISTS consumed_at TIMESTAMPTZ;
+ALTER TABLE shorts.approvals ADD COLUMN IF NOT EXISTS consumed_by TEXT;
+
+-- Append-only log of every approval decision and refusal. Rows are never
+-- updated or deleted, so the trail survives a later revoke or consume.
+CREATE TABLE IF NOT EXISTS shorts.approval_audit (
+    id           BIGSERIAL PRIMARY KEY,
+    approval_id  BIGINT REFERENCES shorts.approvals (id),
+    video_id     BIGINT,
+    action       TEXT,   -- granted | consumed | revoked | refused
+    actor        TEXT,
+    reason       TEXT,
+    created_at   TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS approval_audit_video_idx ON shorts.approval_audit (video_id);
 """
 
 EXPECTED_TABLES = (
     "ideas", "videos", "assets", "comments", "quota_log", "learnings", "runs",
-    "approvals",
+    "approvals", "approval_audit",
 )
 
 

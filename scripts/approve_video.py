@@ -4,9 +4,14 @@ approve_video.py — operator entry point for granting or withdrawing approval.
 
 Deliberately lives outside the pipeline. The pipeline cannot approve its own
 output: nothing under agent/ calls approvals.grant(). Granting requires an
-identity on SHORTS_APPROVER_ALLOWLIST and the matching SHORTS_APPROVAL_TOKEN,
-both of which are unset by default, so out of the box no approval can be
-created and therefore nothing can publish.
+identity on SHORTS_APPROVER_ALLOWLIST, the matching SHORTS_APPROVAL_TOKEN and
+the SHORTS_APPROVAL_SIGNING_KEY that signs the stored record. All three are
+unset by default, so out of the box no approval can be created and therefore
+nothing can publish.
+
+An approval is single-use: it authorises one publication of one exact render,
+and is spent when that upload starts. Every grant, revoke, spend and refusal
+is recorded in the append-only approval_audit table.
 
     python scripts/approve_video.py --video-id 12 --by operator@example.com
     python scripts/approve_video.py --video-id 12 --reject --by operator@example.com

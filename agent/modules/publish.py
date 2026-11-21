@@ -48,13 +48,18 @@ def upload_short(
     Publishing requires a valid approval record for this video and this exact
     file. That check is first, ahead of the idempotency lookup and the kill
     switch, and it consults no environment variable — see approvals.py for why.
+
+    An approval is single-use: it authorises one publication of one render. The
+    read-only verify() below gates entry; consume() spends the record
+    immediately before the upload actually starts.
     """
     # Approval is a precondition for entering this function at all, not one
     # condition among several. Checked before anything else runs, including the
     # early return for an already-uploaded video: if an approval has been
     # revoked or expired, reporting success and letting the caller mark the run
     # 'done' would be the wrong answer even though no bytes move.
-    allowed, reason = approvals.verify(video_id, approvals.file_hash(video_path))
+    content_hash = approvals.file_hash(video_path)
+    allowed, reason = approvals.verify(video_id, content_hash)
     if not allowed:
         logger.warning("publish: REFUSED for video_id=%s — %s", video_id, reason)
         notify(
@@ -117,6 +122,26 @@ def upload_short(
         resumable=True,
         chunksize=10 * 1024 * 1024,
     )
+
+    # Spend the approval. Placed here rather than at the top of the function so
+    # that the cheap no-op exits above — already-uploaded, paused, out of quota
+    # — do not burn a single-use grant, but still before any byte leaves the
+    # machine. The UPDATE is atomic and guarded by `consumed_at IS NULL`, so a
+    # second publisher racing for the same approval is refused rather than also
+    # served.
+    #
+    # If the upload then fails, the approval stays spent. That is deliberate:
+    # a single-use grant does not become reusable because a network call
+    # misbehaved, and re-granting is one command.
+    allowed, reason = approvals.consume(video_id, content_hash, consumed_by="upload_short")
+    if not allowed:
+        logger.warning("publish: REFUSED for video_id=%s — %s", video_id, reason)
+        notify(
+            "UPLOAD_BLOCKED",
+            f"⛔ Publishing refused for video_id={video_id}.\n{reason}",
+            level="error",
+        )
+        return None
 
     logger.info("publish: uploading %s (1600 quota units)", Path(video_path).name)
     try:

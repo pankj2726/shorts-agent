@@ -128,14 +128,19 @@ def _check_publish_approval() -> dict:
 
     allowlist = approvals.approvers()
     token_set = bool((os.environ.get("SHORTS_APPROVAL_TOKEN") or "").strip())
+    # Granting writes a signed row, so a missing signing key makes granting
+    # impossible even with an allowlist and a token. Reporting can_grant without
+    # checking it would tell an operator the system is ready when it is not.
+    key_set = bool(approvals.signing_key())
 
     report = {
         "approvers": len(allowlist),
         "token_configured": token_set,
+        "signing_key_configured": key_set,
         "ttl_s": approvals.ttl_seconds(),
     }
 
-    if allowlist and token_set:
+    if allowlist and token_set and key_set:
         report["can_grant"] = True
         report["note"] = (
             f"{len(allowlist)} approver(s) configured; approvals can be granted "
@@ -148,6 +153,8 @@ def _check_publish_approval() -> dict:
         missing.append("SHORTS_APPROVER_ALLOWLIST")
     if not token_set:
         missing.append("SHORTS_APPROVAL_TOKEN")
+    if not key_set:
+        missing.append("SHORTS_APPROVAL_SIGNING_KEY")
     report["can_grant"] = False
     report["note"] = (
         "no approval can be granted (" + ", ".join(missing) + " unset), so "
@@ -264,6 +271,7 @@ def print_human(report: dict) -> None:
         print("\nPublishing approval")
         print(f"  approvers        : {approval['approvers']}")
         print(f"  token configured : {approval['token_configured']}")
+        print(f"  signing key set  : {approval['signing_key_configured']}")
         print(f"  can grant        : {approval['can_grant']}")
         print(f"  ttl              : {approval['ttl_s']}s")
         print(f"  note             : {approval['note']}")

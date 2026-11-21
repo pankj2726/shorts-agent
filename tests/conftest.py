@@ -57,6 +57,9 @@ BEHAVIOUR_VARS += [
     # that are asserting it stays shut.
     "SHORTS_APPROVER_ALLOWLIST", "SHORTS_APPROVAL_TOKEN",
     "SHORTS_APPROVAL_TTL_S",
+    # Records are signed with this. Left in the shell it would make forged or
+    # pre-P4.1 rows verifiable in tests that assert they are not.
+    "SHORTS_APPROVAL_SIGNING_KEY",
 ]
 
 

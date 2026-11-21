@@ -27,6 +27,9 @@ from agent.modules import approvals, db, publish
 
 IDENTITY = "operator@example.com"
 TOKEN = "test-approval-token-not-a-real-secret"
+# Signs the stored record. Distinct from TOKEN on purpose: one authorises the
+# act of granting, the other authenticates the row afterwards.
+SIGNING_KEY = "test-signing-key-not-a-real-secret"
 OTHER_IDENTITY = "intruder@example.com"
 
 
@@ -64,9 +67,15 @@ def permissive_env(monkeypatch):
 
 @pytest.fixture
 def configured(monkeypatch):
-    """An operator who is actually allowed to approve."""
+    """An operator who is actually allowed to approve.
+
+    Granting needs all three: an allowlisted identity, the shared token, and
+    the key that signs the stored record. Any one missing means nothing can be
+    approved, which is what the refusal tests below assert.
+    """
     monkeypatch.setenv("SHORTS_APPROVER_ALLOWLIST", IDENTITY)
     monkeypatch.setenv("SHORTS_APPROVAL_TOKEN", TOKEN)
+    monkeypatch.setenv("SHORTS_APPROVAL_SIGNING_KEY", SIGNING_KEY)
 
 
 @pytest.fixture
@@ -479,10 +488,35 @@ def test_preflight_reports_a_partially_configured_allowlist(monkeypatch):
 def test_preflight_reports_a_fully_configured_approver(monkeypatch):
     monkeypatch.setenv("SHORTS_APPROVER_ALLOWLIST", f"{IDENTITY}, second@example.com")
     monkeypatch.setenv("SHORTS_APPROVAL_TOKEN", TOKEN)
+    monkeypatch.setenv("SHORTS_APPROVAL_SIGNING_KEY", SIGNING_KEY)
     report = _preflight_approval()
     assert report["can_grant"] is True
     assert report["approvers"] == 2
+    assert report["signing_key_configured"] is True
     assert "approve_video.py" in report["note"]
+
+
+def test_preflight_will_not_claim_ready_without_a_signing_key(state, monkeypatch):
+    """
+    An allowlist and a token are no longer enough to grant.
+
+    Preflight used to report can_grant from those two alone, which would have
+    told an operator the approval path was ready when every grant was about to
+    be refused for want of a signing key. The report must not overstate.
+    """
+    monkeypatch.setenv("SHORTS_APPROVER_ALLOWLIST", IDENTITY)
+    monkeypatch.setenv("SHORTS_APPROVAL_TOKEN", TOKEN)
+    monkeypatch.delenv("SHORTS_APPROVAL_SIGNING_KEY", raising=False)
+
+    report = _preflight_approval()
+    assert report["can_grant"] is False
+    assert report["signing_key_configured"] is False
+    assert "SHORTS_APPROVAL_SIGNING_KEY" in report["note"]
+
+    # And the claim must match reality, not just the report's own bookkeeping.
+    ok, reason = approvals.grant(1, IDENTITY, TOKEN, "deadbeef")
+    assert ok is False
+    assert "signing key" in reason
 
 
 def test_approval_readiness_never_blocks_preflight(monkeypatch):
@@ -696,3 +730,65 @@ def test_missing_approvals_table_fails_closed(monkeypatch, tmp_path):
     allowed, reason = approvals.verify(1, "anyhash")
     assert allowed is False, "a missing approvals table allowed publication"
     assert "refusing" in reason
+
+
+def test_uploading_spends_the_approval(state, configured, uploadable, monkeypatch, sent):
+    """
+    The publish path must spend the record, not merely read it.
+
+    verify() is deliberately read-only so an operator interface can poll it.
+    If upload_short only called verify(), a single approval would still serve
+    every publication forever — the hole P4.1 exists to close.
+    """
+    digest = _approve(state_file=state)
+
+    class _FakeSvc:
+        def videos(self):
+            return type("_V", (), {"insert": lambda self, **kw: type(
+                "_R", (), {"next_chunk": lambda self: (None, {"id": "YTID123"})})()})()
+
+    monkeypatch.setattr(publish, "_get_youtube_service", lambda: _FakeSvc())
+    monkeypatch.setattr(publish.quota, "check", lambda _action: True)
+    monkeypatch.setattr(publish.quota, "consume", lambda _action: None)
+
+    assert publish.upload_short(
+        video_id=1, video_path=str(state), title="t", description="d", tags=[]
+    ) == "YTID123"
+
+    trail = [r["action"] for r in approvals.audit_trail(1)]
+    assert "consumed" in trail
+    # And the record is now unusable, which is the actual point.
+    assert approvals.verify(1, digest)[0] is False
+
+
+def test_a_failed_upload_does_not_leave_the_approval_reusable(
+        state, configured, uploadable, monkeypatch, sent):
+    """
+    A single-use grant does not become reusable because the network failed.
+
+    This is a deliberate trade-off rather than an oversight: the approval is
+    spent the moment publication is attempted, so a transient upload error
+    costs the operator one re-grant instead of leaving an open-ended
+    authorisation sitting in the table. Asserted so the choice is visible.
+    """
+    digest = _approve(state_file=state)
+
+    class _Boom:
+        def next_chunk(self):
+            raise RuntimeError("network went away mid-upload")
+
+    class _FakeSvc:
+        def videos(self):
+            return type("_V", (), {"insert": lambda self, **kw: _Boom()})()
+
+    monkeypatch.setattr(publish, "_get_youtube_service", lambda: _FakeSvc())
+    monkeypatch.setattr(publish.quota, "check", lambda _action: True)
+    monkeypatch.setattr(publish.quota, "consume", lambda _action: None)
+
+    assert publish.upload_short(
+        video_id=1, video_path=str(state), title="t", description="d", tags=[]
+    ) is None
+
+    ok, reason = approvals.consume(1, digest, "upload_short")
+    assert ok is False
+    assert "already been used" in reason

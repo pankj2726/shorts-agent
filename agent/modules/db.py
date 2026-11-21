@@ -151,5 +151,42 @@ def _migrate(conn: sqlite3.Connection) -> None:
     );
 
     CREATE INDEX IF NOT EXISTS approvals_video_idx ON approvals (video_id);
+
+    -- Append-only log of every approval decision and refusal. Rows are never
+    -- updated or deleted, so the trail survives a later revoke or consume.
+    CREATE TABLE IF NOT EXISTS approval_audit (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        approval_id  INTEGER REFERENCES approvals(id),
+        video_id     INTEGER,
+        action       TEXT,   -- granted | consumed | revoked | refused
+        actor        TEXT,
+        reason       TEXT,
+        created_at   DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS approval_audit_video_idx ON approval_audit (video_id);
     """)
+    _upgrade_columns(conn)
     conn.commit()
+
+
+# Columns added after the approvals table first shipped. SQLite has no
+# ADD COLUMN IF NOT EXISTS, so presence is checked against PRAGMA table_info.
+# Every one of these is additive and nullable: an existing database keeps its
+# rows and nothing is dropped, rewritten or re-typed.
+_APPROVAL_COLUMNS = (
+    ("signature", "TEXT"),
+    ("nonce", "TEXT"),
+    ("consumed_at", "DATETIME"),
+    ("consumed_by", "TEXT"),
+)
+
+
+def _upgrade_columns(conn: sqlite3.Connection) -> None:
+    """Add any missing approvals columns. Idempotent and non-destructive."""
+    existing = {
+        row[1] for row in conn.execute("PRAGMA table_info(approvals)").fetchall()
+    }
+    for name, decl in _APPROVAL_COLUMNS:
+        if name not in existing:
+            conn.execute(f"ALTER TABLE approvals ADD COLUMN {name} {decl}")

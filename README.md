@@ -83,6 +83,7 @@ shorts-agent/
 | `TELEGRAM_BOT_TOKEN` | **Inbound only** — `/status /pause /resume`. Outbound delivery is permanently disabled, so this sends nothing | Optional |
 | `TELEGRAM_CHAT_ID` | Allowlist for those inbound commands | Optional |
 | `SHORTS_APPROVAL_TOKEN` | Shared token required to grant a publishing approval | **Yes, to publish** |
+| `SHORTS_APPROVAL_SIGNING_KEY` | Signs each stored approval record, so a row written straight into the database cannot pass as one. Unset = nothing can be granted | **Yes, to publish** |
 | `YT_API_KEY` | Read-only public API key for trends | Recommended |
 | `GROQ_API_KEY` | LLM fallback & free Whisper STT | Recommended |
 | `PIXABAY_API_KEY` | Secondary stock footage & music | Recommended |
@@ -99,6 +100,7 @@ shorts-agent/
 | `MAX_REPLIES_PER_DAY` | `50` | Safe cap for comment replies |
 | `SHORTS_APPROVER_ALLOWLIST` | *(unset)* | Identities allowed to approve. Unset = nobody may approve |
 | `SHORTS_APPROVAL_TTL_S` | `86400` | Approval lifetime; clamped to 60–604800 |
+| | | Approvals are **single-use**: one grant authorises one publication of one exact render, and every grant, revoke, spend and refusal is recorded in `approval_audit`. See `docs/approvals.md` |
 
 ---
 
