@@ -36,6 +36,9 @@ BEHAVIOUR_VARS += [
     "LLM_DEFAULT_PROVIDER", "LLM_DEFAULT_MODEL",
     "LLM_PROVIDER_SCRIPTWRITING", "LLM_MODEL_SCRIPTWRITING",
     "LLM_PROVIDER_CONTENT_ANALYSIS", "LLM_MODEL_CONTENT_ANALYSIS",
+    # Telegram video delivery is paused; a value left in the developer shell
+    # would silently re-enable it for the whole suite.
+    "SHORTS_TELEGRAM_VIDEO_ENABLED",
 ]
 
 

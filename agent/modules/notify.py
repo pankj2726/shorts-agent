@@ -78,6 +78,57 @@ def notify(
     _send_webhook(event, text, level)
 
 
+# ─── Telegram video delivery guard ───────────────────────────────────────────
+#
+# Video delivery is paused by project directive. This is the server-side
+# prohibition: the refusal happens here, in the only function that can reach
+# the sendVideo endpoint, so no caller — pipeline, smoke test, command handler
+# or future API route — can send a video by calling notify() with a path.
+#
+# The switch fails closed. A missing, empty or unparseable value means paused,
+# so a blank injected by GitHub Actions cannot re-enable it, and the state
+# survives restarts and redeployments because it is read from the environment
+# on every call rather than cached at import time.
+#
+# Text notifications are deliberately unaffected.
+
+VIDEO_DELIVERY_ENV = "SHORTS_TELEGRAM_VIDEO_ENABLED"
+
+_blocked_videos: list[str] = []
+
+
+def video_delivery_enabled() -> bool:
+    """Whether Telegram video delivery has been explicitly re-enabled."""
+    from agent.modules.config import env_bool
+
+    return env_bool(VIDEO_DELIVERY_ENV, False)
+
+
+def blocked_videos() -> list[str]:
+    """Video paths refused since process start, for tests and diagnostics."""
+    return list(_blocked_videos)
+
+
+def _guard_video_delivery(video_path: str | None) -> str | None:
+    """
+    Refuse a video attachment unless delivery is explicitly enabled.
+
+    Returns None when refused so the caller sends text only. Never raises: a
+    paused delivery must not take down a status notification.
+    """
+    if not video_path:
+        return None
+    if video_delivery_enabled():
+        return video_path
+    _blocked_videos.append(video_path)
+    logger.warning(
+        "notify: Telegram video delivery is paused (%s is not true); video %s "
+        "was NOT sent, falling back to text only",
+        VIDEO_DELIVERY_ENV, video_path,
+    )
+    return None
+
+
 # ─── Telegram ────────────────────────────────────────────────────────────────
 
 def _send_telegram(
@@ -87,6 +138,10 @@ def _send_telegram(
     buttons: list | None,
     video_path: str | None,
 ) -> None:
+    # Enforced before anything else, including the credential check, so the
+    # refusal is recorded even when Telegram is not configured at all.
+    video_path = _guard_video_delivery(video_path)
+
     token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
     chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
     if not token or not chat_id:
