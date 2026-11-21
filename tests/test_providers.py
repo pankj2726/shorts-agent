@@ -136,9 +136,9 @@ def test_adapter_delegates_to_the_existing_backend(monkeypatch, name, backend):
     monkeypatch.setenv(EXPECTED[name][0], "k")
     seen = {}
 
-    def fake(prompt, system, temperature, max_tokens):
+    def fake(prompt, system, temperature, max_tokens, model=None):
         seen.update(prompt=prompt, system=system,
-                    temperature=temperature, max_tokens=max_tokens)
+                    temperature=temperature, max_tokens=max_tokens, model=model)
         return f"from-{backend}"
 
     monkeypatch.setattr(llm, backend, fake)
@@ -148,7 +148,28 @@ def test_adapter_delegates_to_the_existing_backend(monkeypatch, name, backend):
 
     assert out == f"from-{backend}"
     assert seen == {"prompt": "the prompt", "system": "the system",
-                    "temperature": 0.3, "max_tokens": 128}
+                    "temperature": 0.3, "max_tokens": 128, "model": None}
+
+
+@pytest.mark.parametrize("name,backend", [
+    ("google-gemini", "_gemini"),
+    ("groq", "_groq"),
+    ("openrouter", "_openrouter"),
+])
+def test_adapter_forwards_an_explicit_model(monkeypatch, name, backend):
+    """The selected model must reach the backend, not be dropped en route."""
+    from agent.modules import llm
+
+    monkeypatch.setenv(EXPECTED[name][0], "k")
+    seen = {}
+
+    def fake(prompt, system, temperature, max_tokens, model=None):
+        seen["model"] = model
+        return "ok"
+
+    monkeypatch.setattr(llm, backend, fake)
+    BY_NAME[name].complete("p", model="acme/model-1")
+    assert seen["model"] == "acme/model-1"
 
 
 def test_adapter_propagates_backend_exceptions(monkeypatch):

@@ -44,6 +44,18 @@ _MAX_RETRIES = 3
 _BACKOFF_MIN = 2
 _BACKOFF_MAX = 30
 
+# Process-local telemetry: the model id the provider actually answered with,
+# as reported in its own response body. Set by each backend after a successful
+# call so callers can record what was *used*, not what was requested — a
+# provider may serve a request with a different model than the one asked for.
+# Not thread-safe by design; the pipeline issues one request at a time.
+LAST_ACTUAL_MODEL: str | None = None
+
+
+def _note_actual_model(model_id: str | None) -> None:
+    global LAST_ACTUAL_MODEL
+    LAST_ACTUAL_MODEL = model_id or None
+
 
 class LLMError(Exception):
     """Raised when all providers fail."""
@@ -56,6 +68,7 @@ def complete(
     system: str | None = None,
     temperature: float = 0.7,
     max_tokens: int = 4096,
+    task: str = "scriptwriting",
 ) -> str:
     """
     Return a text completion. Tries Gemini → Groq → OpenRouter on 429/failure.
@@ -65,15 +78,18 @@ def complete(
     the provider registry, per-provider health and the quota tracker. The chain
     below stays the default so the working path is never changed implicitly.
 
-    Note: complete_json() still uses the direct chain below; it has its own
-    multi-provider retry and is deliberately left alone.
+    `task` selects the routing-table entry and the per-task model
+    configuration; complete_json() goes through here too, so both entry points
+    share one execution path.
     """
     from agent.router import router_enabled
 
     if router_enabled():
         from agent.router import complete as _routed_complete
 
-        return _routed_complete(prompt, system, temperature, max_tokens)
+        return _routed_complete(
+            prompt, system, temperature, max_tokens, task=task
+        )
 
     errors: list[str] = []
 
@@ -110,43 +126,50 @@ def complete(
     raise LLMError("All LLM providers failed: " + "; ".join(errors))
 
 
+def _strip_code_fences(raw: str) -> str:
+    """Remove a surrounding markdown code fence, if the model added one."""
+    text = raw.strip()
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+    return text
+
+
 def complete_json(
     prompt: str,
     system: str | None = None,
     temperature: float = 0.3,
     max_tokens: int = 4096,
+    task: str = "scriptwriting",
 ) -> Any:
     """
     Like complete() but parses the response as JSON.
     Strips markdown code fences if present.
-    Retries or fails over if invalid JSON is received.
-    """
-    providers = []
-    if os.environ.get("GEMINI_API_KEY"):
-        providers.append(("Gemini", _gemini))
-    if os.environ.get("GROQ_API_KEY"):
-        providers.append(("Groq", _groq))
-    if os.environ.get("OPENROUTER_API_KEY"):
-        providers.append(("OpenRouter", _openrouter))
+    Retries if the response is not parseable.
 
-    last_exc = None
-    for name, provider_fn in providers:
-        for attempt in range(2):
-            try:
-                raw = provider_fn(prompt, system, temperature, max_tokens)
-                text = raw.strip()
-                if text.startswith("```"):
-                    lines = text.splitlines()
-                    if lines[0].startswith("```"):
-                        lines = lines[1:]
-                    if lines and lines[-1].strip() == "```":
-                        lines = lines[:-1]
-                    text = "\n".join(lines).strip()
-                return json.loads(text)
-            except Exception as exc:
-                last_exc = exc
-                logger.warning("llm: %s JSON attempt %d failed: %s", name, attempt + 1, exc)
-                time.sleep(1)
+    `task` selects routing and per-task model configuration. Both entry points
+    share one execution path, so a model selected for the task is the model
+    that is actually requested.
+    """
+    last_exc: Exception | None = None
+    for attempt in range(2):
+        # Goes through complete(), so both entry points share one routing and
+        # execution path. Previously this built its own provider list from
+        # env-var presence, which meant a routed model selection, health
+        # filtering and the quota tracker were all bypassed for JSON calls.
+        raw = complete(prompt, system, temperature, max_tokens, task=task)
+        try:
+            return json.loads(_strip_code_fences(raw))
+        except Exception as exc:  # noqa: BLE001 - parse failures are expected
+            last_exc = exc
+            logger.warning(
+                "llm: JSON attempt %d unparseable: %s", attempt + 1, exc
+            )
+            time.sleep(1)
 
     raise LLMError(f"All providers failed to produce valid JSON: {last_exc}")
 
@@ -157,12 +180,20 @@ class _RateLimited(Exception):
     pass
 
 
-def _gemini(prompt: str, system: str | None, temperature: float, max_tokens: int) -> str:
+def _gemini(
+    prompt: str,
+    system: str | None,
+    temperature: float,
+    max_tokens: int,
+    model: str | None = None,
+) -> str:
     key = os.environ.get("GEMINI_API_KEY", "").strip()
     if not key:
         raise LLMError("GEMINI_API_KEY is empty")
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={key}"
+    # An explicit model wins; otherwise the historical default is unchanged.
+    model_id = model or GEMINI_MODEL
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent?key={key}"
     payload: dict = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {
@@ -184,15 +215,23 @@ def _gemini(prompt: str, system: str | None, temperature: float, max_tokens: int
         if resp.status_code == 429:
             raise _RateLimited(resp.text)
         if resp.status_code != 200:
-            if resp.status_code == 404:
-                # Fallback to gemini-2.0-flash if 1.5-flash not found
+            # The legacy default silently retried against gemini-2.0-flash on a
+            # 404. That is kept only when no model was explicitly requested:
+            # swapping models under an explicit request would make telemetry
+            # claim a model that never served the call.
+            if resp.status_code == 404 and model is None:
                 alt_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={key}"
                 r2 = requests.post(alt_url, json=payload, timeout=30)
                 if r2.status_code == 200:
-                    return r2.json()["candidates"][0]["content"]["parts"][0]["text"]
+                    data2 = r2.json()
+                    _note_actual_model(
+                        data2.get("modelVersion") or "gemini-2.0-flash"
+                    )
+                    return data2["candidates"][0]["content"]["parts"][0]["text"]
             logger.warning("llm: Gemini error: %s", resp.text[:300])
             resp.raise_for_status()
         data = resp.json()
+        _note_actual_model(data.get("modelVersion") or model_id)
         return data["candidates"][0]["content"]["parts"][0]["text"]
 
     try:
@@ -203,11 +242,18 @@ def _gemini(prompt: str, system: str | None, temperature: float, max_tokens: int
         raise
 
 
-def _groq(prompt: str, system: str | None, temperature: float, max_tokens: int) -> str:
+def _groq(
+    prompt: str,
+    system: str | None,
+    temperature: float,
+    max_tokens: int,
+    model: str | None = None,
+) -> str:
     messages = []
     if system:
         messages.append({"role": "system", "content": system})
     messages.append({"role": "user", "content": prompt})
+    model_id = model or GROQ_MODEL
 
     @retry(
         retry=retry_if_exception_type(requests.exceptions.RequestException),
@@ -223,7 +269,7 @@ def _groq(prompt: str, system: str | None, temperature: float, max_tokens: int) 
                 "Content-Type": "application/json",
             },
             json={
-                "model": GROQ_MODEL,
+                "model": model_id,
                 "messages": messages,
                 "temperature": temperature,
                 "max_tokens": max_tokens,
@@ -233,7 +279,9 @@ def _groq(prompt: str, system: str | None, temperature: float, max_tokens: int) 
         if resp.status_code == 429:
             raise _RateLimited(f"HTTP 429 from Groq")
         resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"]
+        data = resp.json()
+        _note_actual_model(data.get("model") or model_id)
+        return data["choices"][0]["message"]["content"]
 
     try:
         return _call()
@@ -245,11 +293,18 @@ def _groq(prompt: str, system: str | None, temperature: float, max_tokens: int) 
         raise
 
 
-def _openrouter(prompt: str, system: str | None, temperature: float, max_tokens: int) -> str:
+def _openrouter(
+    prompt: str,
+    system: str | None,
+    temperature: float,
+    max_tokens: int,
+    model: str | None = None,
+) -> str:
     messages = []
     if system:
         messages.append({"role": "system", "content": system})
     messages.append({"role": "user", "content": prompt})
+    model_id = model or OPENROUTER_MODEL
 
     @retry(
         retry=retry_if_exception_type(requests.exceptions.RequestException),
@@ -267,7 +322,7 @@ def _openrouter(prompt: str, system: str | None, temperature: float, max_tokens:
                 "X-Title": "Shorts Agent",
             },
             json={
-                "model": OPENROUTER_MODEL,
+                "model": model_id,
                 "messages": messages,
                 "temperature": temperature,
                 "max_tokens": max_tokens,
@@ -275,6 +330,10 @@ def _openrouter(prompt: str, system: str | None, temperature: float, max_tokens:
             timeout=60,
         )
         resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"]
+        data = resp.json()
+        # OpenRouter routes a request to whichever upstream serves the slug, and
+        # reports the concrete model it settled on. Record that, not the slug.
+        _note_actual_model(data.get("model") or model_id)
+        return data["choices"][0]["message"]["content"]
 
     return _call()

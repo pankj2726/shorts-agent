@@ -72,14 +72,36 @@ class Provider:
 
         return bool(os.environ.get(self.key_env, "").strip())
 
+    def _invoke(
+        self,
+        prompt: str,
+        system: str | None,
+        temperature: float,
+        max_tokens: int,
+        model: str | None = None,
+    ) -> str:
+        raise NotImplementedError
+
     def _call(
         self,
         prompt: str,
         system: str | None,
         temperature: float,
         max_tokens: int,
+        model: str | None = None,
     ) -> str:
-        raise NotImplementedError
+        """
+        Reset telemetry, then invoke the backend.
+
+        The provider-reported model lives in module-level state, so it must be
+        cleared before every call. Without this, a provider that does not
+        report a model would inherit the previous provider's, and the recorded
+        model would describe a call that never happened.
+        """
+        from agent.modules import llm
+
+        llm.LAST_ACTUAL_MODEL = None
+        return self._invoke(prompt, system, temperature, max_tokens, model)
 
     def complete(
         self,
@@ -87,16 +109,61 @@ class Provider:
         system: str | None = None,
         temperature: float = 0.7,
         max_tokens: int = 4096,
+        model: str | None = None,
     ) -> str:
         """
         Generate text. Raises if the credential is absent, so callers get one
         clear failure mode instead of a provider-specific one.
+
+        `model` selects the model the request asks for. Omitting it leaves each
+        backend on its historical default, so existing behaviour is unchanged.
         """
         if not self.has_credential():
             from agent.modules.llm import LLMError
 
             raise LLMError(f"{self.key_env} is empty")
-        return self._call(prompt, system, temperature, max_tokens)
+        return self._call(prompt, system, temperature, max_tokens, model)
+
+    def declared_models(self) -> list[ModelInfo]:
+        """
+        Models this provider declares in the provider registry.
+
+        This is distinct from list_models(): the registry is a curated,
+        checked-in document, while list_models() would query the provider's
+        live endpoint. Only the former is available offline.
+        """
+        from agent.router import registry_by_id
+
+        entry = registry_by_id().get(self.name) or {}
+        out: list[ModelInfo] = []
+        for item in entry.get("models") or []:
+            if not isinstance(item, dict) or not item.get("model_id"):
+                continue
+            out.append(
+                ModelInfo(
+                    model_id=item["model_id"],
+                    modality=tuple(item.get("modality") or ()),
+                    context_tokens=item.get("context_tokens"),
+                    notes=item.get("notes") or "",
+                )
+            )
+        return out
+
+    def supports_model(self, model_id: str) -> bool:
+        """Whether the registry declares `model_id` for this provider."""
+        return any(m.model_id == model_id for m in self.declared_models())
+
+    def last_model(self) -> str | None:
+        """
+        Model id the provider reported for its most recent successful call.
+
+        Read from agent.modules.llm telemetry. Returns None if no call has been
+        made in this process.
+        """
+        from agent.modules import llm
+
+        return llm.LAST_ACTUAL_MODEL
+
 
     def list_models(self) -> list[ModelInfo]:
         """
@@ -145,30 +212,30 @@ class GeminiProvider(Provider):
     name = "google-gemini"
     key_env = "GEMINI_API_KEY"
 
-    def _call(self, prompt, system, temperature, max_tokens):
+    def _invoke(self, prompt, system, temperature, max_tokens, model=None):
         from agent.modules.llm import _gemini
 
-        return _gemini(prompt, system, temperature, max_tokens)
+        return _gemini(prompt, system, temperature, max_tokens, model)
 
 
 class GroqProvider(Provider):
     name = "groq"
     key_env = "GROQ_API_KEY"
 
-    def _call(self, prompt, system, temperature, max_tokens):
+    def _invoke(self, prompt, system, temperature, max_tokens, model=None):
         from agent.modules.llm import _groq
 
-        return _groq(prompt, system, temperature, max_tokens)
+        return _groq(prompt, system, temperature, max_tokens, model)
 
 
 class OpenRouterProvider(Provider):
     name = "openrouter"
     key_env = "OPENROUTER_API_KEY"
 
-    def _call(self, prompt, system, temperature, max_tokens):
+    def _invoke(self, prompt, system, temperature, max_tokens, model=None):
         from agent.modules.llm import _openrouter
 
-        return _openrouter(prompt, system, temperature, max_tokens)
+        return _openrouter(prompt, system, temperature, max_tokens, model)
 
 
 # Insertion order is the default fallback order, matching the chain that

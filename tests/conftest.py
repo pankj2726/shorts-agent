@@ -29,6 +29,14 @@ CREDENTIAL_VARS = [
     "YT_API_KEY", "YT_REFRESH_TOKEN", "DATABASE_URL",
 ]
 BEHAVIOUR_VARS = ["LLM_ROUTER", "ROUTER_MODALITY_POLICY", "DB_BACKEND"]
+# Per-task model selection is read from LLM_PROVIDER_<TASK> / LLM_MODEL_<TASK>
+# plus the two generic defaults. A developer who has any of these set locally
+# would otherwise change routing for the whole suite, so they are cleared too.
+BEHAVIOUR_VARS += [
+    "LLM_DEFAULT_PROVIDER", "LLM_DEFAULT_MODEL",
+    "LLM_PROVIDER_SCRIPTWRITING", "LLM_MODEL_SCRIPTWRITING",
+    "LLM_PROVIDER_CONTENT_ANALYSIS", "LLM_MODEL_CONTENT_ANALYSIS",
+]
 
 
 @pytest.fixture(autouse=True)
