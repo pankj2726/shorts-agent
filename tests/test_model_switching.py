@@ -186,9 +186,11 @@ def test_telemetry_records_the_provider_that_served(routed, monkeypatch):
     monkeypatch.setenv("LLM_PROVIDER_SCRIPTWRITING", "groq")
     monkeypatch.setattr(llm, "_groq", lambda *a, **k: "text")
     for backend in ("_gemini", "_openrouter"):
+        # `backend` is bound as a default argument on purpose: a closure over
+        # the loop variable would report "_openrouter" whichever stub fired.
         monkeypatch.setattr(
             llm, backend,
-            lambda *a, **k: pytest.fail(f"{backend} must not be called"),
+            lambda *a, _name=backend, **k: pytest.fail(f"{_name} must not be called"),
         )
 
     routed.complete("write a hook", task="scriptwriting")
