@@ -49,6 +49,9 @@ BEHAVIOUR_VARS += [
     "SHORTS_BUDGET_UNKNOWN_POLICY", "SHORTS_BUDGET_MAX_PER_REQUEST",
     "SHORTS_BUDGET_MAX_PER_TASK", "SHORTS_BUDGET_MAX_PERIOD",
     "SHORTS_BUDGET_PERIOD_S",
+    # Approval gating. A stray value in the developer shell would flip the
+    # pipeline guard for the whole suite.
+    "APPROVAL_REQUIRED",
 ]
 
 

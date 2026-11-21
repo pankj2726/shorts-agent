@@ -285,7 +285,7 @@ CREATE TABLE IF NOT EXISTS shorts.learnings (
 CREATE TABLE IF NOT EXISTS shorts.runs (
     id           BIGSERIAL PRIMARY KEY,
     run_type     TEXT,
-    status       TEXT,
+    status       TEXT,   -- running | done | failed | blocked
     details      TEXT,
     started_at   TIMESTAMPTZ DEFAULT now(),
     finished_at  TIMESTAMPTZ

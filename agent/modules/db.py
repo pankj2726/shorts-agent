@@ -128,7 +128,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
     CREATE TABLE IF NOT EXISTS runs (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
         run_type    TEXT,   -- pipeline | engage | analytics | commands
-        status      TEXT,   -- running | done | failed
+        status      TEXT,   -- running | done | failed | blocked
         details     TEXT,
         started_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
         finished_at DATETIME

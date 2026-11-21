@@ -59,6 +59,44 @@ def _notify_safe(event: str, text: str, level: str = "info") -> None:
         pass
 
 
+def approval_channel_available() -> tuple[bool, str]:
+    """
+    Whether a human can actually grant approval right now.
+
+    Telegram was the only approval channel and its delivery is permanently
+    disabled, so this is False until a replacement exists. It is derived from
+    the notification module rather than hardcoded, so wiring up a new channel
+    updates this instead of leaving a stale constant that claims approval is
+    impossible.
+    """
+    from agent.modules.notify import telegram_delivery_enabled
+
+    if telegram_delivery_enabled():
+        return True, "telegram"
+    return False, (
+        "approval channel unavailable: Telegram delivery is permanently "
+        "disabled and no replacement channel is configured"
+    )
+
+
+def approval_gate() -> tuple[bool, str]:
+    """
+    Whether the pipeline may proceed, given the approval requirement.
+
+    Returns (proceed, reason). When approval is not required there is no gate.
+    When it is required and no channel can deliver or receive a decision, the
+    pipeline must stop before doing any work — otherwise it burns a full run
+    and then fails at the approval step, which reads as a pipeline failure
+    rather than what it is: a missing approval mechanism.
+    """
+    if not env_bool("APPROVAL_REQUIRED", True):
+        return True, "approval not required"
+    available, detail = approval_channel_available()
+    if available:
+        return True, f"approval channel available ({detail})"
+    return False, detail
+
+
 def run_pipeline() -> None:
     from agent.modules import db, quota
     from agent.modules.notify import notify
@@ -75,6 +113,32 @@ def run_pipeline() -> None:
     from pathlib import Path
 
     logger.info("=== Pipeline start ===")
+
+    # Gate checked before any expensive stage. Recording this as `blocked`
+    # rather than `failed` keeps an absent approval mechanism distinguishable
+    # from a genuine pipeline fault, and exiting cleanly avoids a red run for a
+    # condition that is intentional until a replacement channel exists.
+    proceed, gate_reason = approval_gate()
+    if not proceed:
+        reason = f"blocked: {gate_reason}"
+        conn = db.get_conn()
+        conn.execute(
+            "INSERT INTO runs (run_type, status, details, finished_at) "
+            "VALUES ('pipeline', 'blocked', ?, ?)",
+            (reason, datetime.now(timezone.utc).isoformat()),
+        )
+        conn.commit()
+        conn.close()
+        logger.error(
+            "=== Pipeline blocked before any work === %s. No research, script, "
+            "TTS, asset or render work was started. Re-enable by configuring an "
+            "approval channel, or set APPROVAL_REQUIRED=false only if unattended "
+            "publishing is genuinely intended.",
+            reason,
+        )
+        notify("PIPELINE_BLOCKED", reason, level="warn")
+        return
+
     conn = db.get_conn()
     run_id = conn.execute(
         "INSERT INTO runs (run_type, status) VALUES ('pipeline', 'running')"
@@ -202,9 +266,15 @@ def _wait_for_approval(video_id: int, video_path: str, script: dict) -> None:
     replacement approval channel exists. It is unreachable until this guard is
     deliberately removed.
     """
+    available, detail = approval_channel_available()
+    if available:
+        raise RuntimeError(
+            f"approval channel reports available ({detail}) but "
+            "_wait_for_approval has no implementation for it; refusing to "
+            f"proceed with video_id={video_id}"
+        )
     raise RuntimeError(
-        "approval unavailable: Telegram delivery is permanently disabled and no "
-        "replacement approval channel is configured; refusing to proceed with "
+        f"approval unavailable: {detail}; refusing to proceed with "
         f"video_id={video_id}"
     )
 
