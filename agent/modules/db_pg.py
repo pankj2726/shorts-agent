@@ -285,10 +285,25 @@ CREATE TABLE IF NOT EXISTS shorts.learnings (
 CREATE TABLE IF NOT EXISTS shorts.runs (
     id           BIGSERIAL PRIMARY KEY,
     run_type     TEXT,
-    status       TEXT,
+    status       TEXT,   -- running | done | failed | blocked
     details      TEXT,
     started_at   TIMESTAMPTZ DEFAULT now(),
     finished_at  TIMESTAMPTZ
+);
+
+-- Publishing consults this table and nothing else. There is no env var that
+-- can substitute for a row here; see agent/modules/approvals.py.
+CREATE TABLE IF NOT EXISTS shorts.approvals (
+    id           BIGSERIAL PRIMARY KEY,
+    video_id     BIGINT REFERENCES shorts.videos (id),
+    decision     TEXT,   -- approved | rejected
+    approved_by  TEXT,   -- identity from SHORTS_APPROVER_ALLOWLIST
+    channel      TEXT,   -- how the decision arrived (cli now, web/android in P4)
+    content_hash TEXT,   -- sha256 of the approved render; binds the grant to bytes
+    granted_at   TIMESTAMPTZ,
+    expires_at   TIMESTAMPTZ,
+    revoked_at   TIMESTAMPTZ,
+    created_at   TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS videos_yt_id_idx     ON shorts.videos (yt_video_id);
@@ -296,10 +311,12 @@ CREATE INDEX IF NOT EXISTS videos_published_idx ON shorts.videos (published_at);
 CREATE INDEX IF NOT EXISTS comments_yt_id_idx   ON shorts.comments (yt_video_id);
 CREATE INDEX IF NOT EXISTS quota_log_day_idx    ON shorts.quota_log (day);
 CREATE INDEX IF NOT EXISTS runs_started_idx     ON shorts.runs (started_at);
+CREATE INDEX IF NOT EXISTS approvals_video_idx  ON shorts.approvals (video_id);
 """
 
 EXPECTED_TABLES = (
     "ideas", "videos", "assets", "comments", "quota_log", "learnings", "runs",
+    "approvals",
 )
 
 

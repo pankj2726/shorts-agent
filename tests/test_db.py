@@ -49,7 +49,7 @@ def test_sqlite_path_creates_every_expected_table(tmp_path, monkeypatch):
         conn.close()
     names = {r["name"] for r in rows}
     for table in ("ideas", "videos", "assets", "comments",
-                  "quota_log", "learnings", "runs"):
+                  "quota_log", "learnings", "runs", "approvals"):
         assert table in names, f"{table} missing from {sorted(names)}"
 
 
@@ -71,7 +71,8 @@ def test_sqlite_schema_migration_is_idempotent(tmp_path, monkeypatch):
     # sqlite_master also holds sqlite_sequence, created by AUTOINCREMENT, so
     # assert on the application tables rather than on a raw total.
     assert sorted(app_tables) == sorted(
-        ["ideas", "videos", "assets", "comments", "quota_log", "learnings", "runs"]
+        ["ideas", "videos", "assets", "comments", "quota_log", "learnings",
+         "runs", "approvals"]
     )
     assert len(app_tables) == len(set(app_tables)), f"duplicates in {app_tables}"
 
@@ -163,7 +164,7 @@ def test_ddl_is_idempotent():
     from agent.modules import db_pg
 
     assert "CREATE SCHEMA IF NOT EXISTS" in db_pg.SCHEMA_DDL
-    assert db_pg.SCHEMA_DDL.count("CREATE TABLE IF NOT EXISTS") == 7
+    assert db_pg.SCHEMA_DDL.count("CREATE TABLE IF NOT EXISTS") == 8
 
 
 def test_ddl_uses_postgres_types_not_sqlite_ones():

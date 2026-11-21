@@ -59,6 +59,51 @@ def _notify_safe(event: str, text: str, level: str = "info") -> None:
         pass
 
 
+def approval_channel_available() -> tuple[bool, str]:
+    """
+    Whether a human can actually grant approval right now.
+
+    Derived from approvals.delivery_channels() — the provider-neutral registry
+    of channels that can deliver a request and receive a decision. That list is
+    empty until P4 adds real ones, so this is False for now.
+
+    It deliberately does not consult Telegram, not even to check that delivery
+    is disabled. Deriving availability from Telegram was how it became the
+    implicit approval mechanism in the first place, and it failed open: the
+    moment anything made telegram_delivery_enabled() return True, the pipeline
+    gate reopened silently. Asking a neutral registry instead means adding a
+    channel is additive and no single provider can flip this.
+    """
+    from agent.modules import approvals
+
+    channels = approvals.delivery_channels()
+    if channels:
+        return True, ", ".join(channels)
+    return False, (
+        "approval channel unavailable: no channel is registered that can "
+        "deliver an approval request and receive a decision. Telegram is "
+        "permanently disabled and is deliberately not a candidate."
+    )
+
+
+def approval_gate() -> tuple[bool, str]:
+    """
+    Whether the pipeline may proceed, given the approval requirement.
+
+    Returns (proceed, reason). When approval is not required there is no gate.
+    When it is required and no channel can deliver or receive a decision, the
+    pipeline must stop before doing any work — otherwise it burns a full run
+    and then fails at the approval step, which reads as a pipeline failure
+    rather than what it is: a missing approval mechanism.
+    """
+    if not env_bool("APPROVAL_REQUIRED", True):
+        return True, "approval not required"
+    available, detail = approval_channel_available()
+    if available:
+        return True, f"approval channel available ({detail})"
+    return False, detail
+
+
 def run_pipeline() -> None:
     from agent.modules import db, quota
     from agent.modules.notify import notify
@@ -69,12 +114,38 @@ def run_pipeline() -> None:
     from agent.modules.assets import fetch_stock_clips, pick_music
     from agent.modules.render import render_short
     from agent.modules.qa import check_render
-    from agent.modules.publish import upload_short, send_for_manual_review
+    from agent.modules.publish import upload_short
 
     import tempfile
     from pathlib import Path
 
     logger.info("=== Pipeline start ===")
+
+    # Gate checked before any expensive stage. Recording this as `blocked`
+    # rather than `failed` keeps an absent approval mechanism distinguishable
+    # from a genuine pipeline fault, and exiting cleanly avoids a red run for a
+    # condition that is intentional until a replacement channel exists.
+    proceed, gate_reason = approval_gate()
+    if not proceed:
+        reason = f"blocked: {gate_reason}"
+        conn = db.get_conn()
+        conn.execute(
+            "INSERT INTO runs (run_type, status, details, finished_at) "
+            "VALUES ('pipeline', 'blocked', ?, ?)",
+            (reason, datetime.now(timezone.utc).isoformat()),
+        )
+        conn.commit()
+        conn.close()
+        logger.error(
+            "=== Pipeline blocked before any work === %s. No research, script, "
+            "TTS, asset or render work was started. Re-enable by configuring an "
+            "approval channel, or set APPROVAL_REQUIRED=false only if unattended "
+            "publishing is genuinely intended.",
+            reason,
+        )
+        notify("PIPELINE_BLOCKED", reason, level="warn")
+        return
+
     conn = db.get_conn()
     run_id = conn.execute(
         "INSERT INTO runs (run_type, status) VALUES ('pipeline', 'running')"
@@ -131,13 +202,17 @@ def run_pipeline() -> None:
         conn.commit()
         conn.close()
 
-        # 7. Publish or send for manual review
-        approval_required = env_bool("APPROVAL_REQUIRED", True)
-        if approval_required:
+        # 7. Publish, but only against a valid approval record.
+        #
+        # APPROVAL_REQUIRED is deliberately not consulted here. It used to gate
+        # the wait below, which meant setting it to false fell straight through
+        # to the upload. The requirement now lives in upload_short(), which
+        # checks the approvals table and cannot be switched off by an env var.
+        if env_bool("APPROVAL_REQUIRED", True):
             _wait_for_approval(video_id, render_info["video_path"], script)
 
         # Determine publish time (next scheduled slot)
-        from agent.modules.publish import upload_short, send_for_manual_review
+        from agent.modules.publish import upload_short
         publish_times = env_list("PUBLISH_TIMES", ["13:00", "19:00"])
         # Simplified: schedule for tomorrow at first slot
         from datetime import date, timedelta
@@ -154,14 +229,44 @@ def run_pipeline() -> None:
             contains_synthetic=bool(script.get("contains_synthetic")),
         )
 
-        if not yt_id:
-            # Fallback: send to Telegram for manual scheduling
-            send_for_manual_review(
-                video_id, render_info["video_path"], script["title"], script
-            )
-
-        # Mark pipeline run done
         conn = db.get_conn()
+        if not yt_id:
+            # Not published. Record it as blocked rather than done: a run that
+            # produced a video nobody approved is not a successful run, and
+            # marking it done with yt_id=None buried the refusal in a status
+            # that reads as success. upload_short has already logged and
+            # notified with the specific reason.
+            #
+            # The previous fallback here was send_for_manual_review(), which
+            # posted the MP4 to Telegram for manual scheduling. Telegram
+            # delivery is permanently disabled, so that call could never reach
+            # anyone; keeping it would mean routing around a missing approval
+            # mechanism rather than respecting it.
+            conn.execute(
+                "UPDATE runs SET status='blocked', finished_at=?, details=? WHERE id=?",
+                (
+                    datetime.now(timezone.utc).isoformat(),
+                    f"blocked: publishing refused for video_id={video_id}; "
+                    f"no valid approval record. Nothing was uploaded.",
+                    run_id,
+                ),
+            )
+            conn.commit()
+            conn.close()
+            logger.warning(
+                "=== Pipeline finished without publishing: video_id=%s blocked "
+                "pending approval ===", video_id,
+            )
+            _notify_safe(
+                "PIPELINE_BLOCKED",
+                f"⛔ Rendered but not published (video_id={video_id}).\n"
+                f"No valid approval record. Grant one with "
+                f"scripts/approve_video.py, then re-run.\n"
+                f"Run: {os.environ.get('GH_RUN_URL', '?')}",
+                level="warn",
+            )
+            return
+
         conn.execute(
             "UPDATE runs SET status='done', finished_at=?, details=? WHERE id=?",
             (datetime.now(timezone.utc).isoformat(), f"video_id={video_id} yt_id={yt_id}", run_id),
@@ -202,9 +307,15 @@ def _wait_for_approval(video_id: int, video_path: str, script: dict) -> None:
     replacement approval channel exists. It is unreachable until this guard is
     deliberately removed.
     """
+    available, detail = approval_channel_available()
+    if available:
+        raise RuntimeError(
+            f"approval channel reports available ({detail}) but "
+            "_wait_for_approval has no implementation for it; refusing to "
+            f"proceed with video_id={video_id}"
+        )
     raise RuntimeError(
-        "approval unavailable: Telegram delivery is permanently disabled and no "
-        "replacement approval channel is configured; refusing to proceed with "
+        f"approval unavailable: {detail}; refusing to proceed with "
         f"video_id={video_id}"
     )
 

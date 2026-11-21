@@ -6,9 +6,10 @@ Quota costs:
   videos.update:   50 units
   thumbnails.set:  50 units
 
-Upload is ONLY done when PAUSE_PUBLISHING != 'true' and quota allows.
-Until the API audit passes, publishes to Private with a Telegram notification
-containing the MP4 so the operator can schedule it manually in Studio.
+Upload is ONLY done when a valid approval record exists for this exact render,
+PAUSE_PUBLISHING != 'true' and quota allows. Until the API audit passes,
+publishes to Private with a notification containing the MP4 so the operator can
+schedule it manually in Studio.
 """
 import json
 import logging
@@ -18,7 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from agent.modules import db, quota
+from agent.modules import approvals, db, quota
 from agent.modules.config import env_bool, env_str
 from agent.modules.notify import notify
 
@@ -42,8 +43,27 @@ def upload_short(
     - contains_synthetic: sets the synthetic-media disclosure flag.
 
     Returns the YouTube video ID string, or None on failure.
-    Idempotent: checks the DB for an existing yt_video_id first.
+    Idempotent: an already-uploaded video returns its existing yt_video_id.
+
+    Publishing requires a valid approval record for this video and this exact
+    file. That check is first, ahead of the idempotency lookup and the kill
+    switch, and it consults no environment variable — see approvals.py for why.
     """
+    # Approval is a precondition for entering this function at all, not one
+    # condition among several. Checked before anything else runs, including the
+    # early return for an already-uploaded video: if an approval has been
+    # revoked or expired, reporting success and letting the caller mark the run
+    # 'done' would be the wrong answer even though no bytes move.
+    allowed, reason = approvals.verify(video_id, approvals.file_hash(video_path))
+    if not allowed:
+        logger.warning("publish: REFUSED for video_id=%s — %s", video_id, reason)
+        notify(
+            "UPLOAD_BLOCKED",
+            f"⛔ Publishing refused for video_id={video_id}.\n{reason}",
+            level="error",
+        )
+        return None
+
     # Idempotency check
     conn = db.get_conn()
     row = conn.execute("SELECT yt_video_id FROM videos WHERE id=?", (video_id,)).fetchone()
@@ -52,7 +72,7 @@ def upload_short(
         logger.info("publish: video_id=%s already uploaded as %s", video_id, row["yt_video_id"])
         return row["yt_video_id"]
 
-    # Kill switch
+    # Kill switch — defence in depth behind the approval record, never instead of it
     if env_bool("PAUSE_PUBLISHING", False):
         logger.info("publish: PAUSE_PUBLISHING=true — skipping upload")
         notify("UPLOAD_SKIP", "PAUSE_PUBLISHING is true — video not uploaded", level="warn")
