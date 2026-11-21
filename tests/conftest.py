@@ -52,6 +52,11 @@ BEHAVIOUR_VARS += [
     # Approval gating. A stray value in the developer shell would flip the
     # pipeline guard for the whole suite.
     "APPROVAL_REQUIRED",
+    # Approval records. Without clearing these, an operator's allowlist or
+    # token in the developer shell would let the publish gate open in tests
+    # that are asserting it stays shut.
+    "SHORTS_APPROVER_ALLOWLIST", "SHORTS_APPROVAL_TOKEN",
+    "SHORTS_APPROVAL_TTL_S",
 ]
 
 

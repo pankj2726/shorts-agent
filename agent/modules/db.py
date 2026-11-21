@@ -9,6 +9,7 @@ Tables:
   quota_log    — (also managed by quota.py, referenced here for completeness)
   learnings    — weekly learning bullets
   runs         — pipeline run history
+  approvals    — the only authority on whether a video may be published
 """
 import os
 import sqlite3
@@ -133,5 +134,22 @@ def _migrate(conn: sqlite3.Connection) -> None:
         started_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
         finished_at DATETIME
     );
+
+    -- Publishing consults this table and nothing else. There is no env var
+    -- that can substitute for a row here; see agent/modules/approvals.py.
+    CREATE TABLE IF NOT EXISTS approvals (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        video_id     INTEGER REFERENCES videos(id),
+        decision     TEXT,   -- approved | rejected
+        approved_by  TEXT,   -- identity from SHORTS_APPROVER_ALLOWLIST
+        channel      TEXT,   -- how the decision arrived (cli now, web/android in P4)
+        content_hash TEXT,   -- sha256 of the approved render; binds the grant to bytes
+        granted_at   DATETIME,
+        expires_at   DATETIME,
+        revoked_at   DATETIME,
+        created_at   DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS approvals_video_idx ON approvals (video_id);
     """)
     conn.commit()
