@@ -651,3 +651,48 @@ def test_pipeline_no_longer_routes_a_refusal_to_telegram():
     assert "send_for_manual_review(" not in src.replace(
         "# The previous fallback here was send_for_manual_review(), which", "")
     assert "from agent.modules.publish import upload_short, send_for_manual_review" not in src
+
+
+def test_missing_approvals_table_fails_closed(monkeypatch, tmp_path):
+    """
+    The live PostgreSQL instance has 7 tables and no `approvals` — the schema
+    migration predates this table, and the Postgres path does not auto-migrate
+    on connect the way SQLite does.
+
+    So switching DB_BACKEND=postgres today would query a table that is not
+    there. That must refuse publication, not allow it. Verified against a real
+    missing table rather than a stubbed exception.
+    """
+    import sqlite3
+
+    bare = tmp_path / "bare.sqlite"
+    conn = sqlite3.connect(bare)
+    conn.execute("CREATE TABLE videos (id INTEGER PRIMARY KEY, render_path TEXT)")
+    conn.commit()
+    conn.close()
+
+    class _Bare:
+        """A connection to a database with no approvals table."""
+
+        row_factory = None
+
+        def __init__(self):
+            self._c = sqlite3.connect(bare)
+            self._c.row_factory = sqlite3.Row
+
+        def execute(self, sql, params=()):
+            return self._c.execute(sql, params)
+
+        def commit(self):
+            self._c.commit()
+
+        def close(self):
+            self._c.close()
+
+    from agent.modules import db as db_mod
+
+    monkeypatch.setattr(db_mod, "get_conn", lambda: _Bare())
+
+    allowed, reason = approvals.verify(1, "anyhash")
+    assert allowed is False, "a missing approvals table allowed publication"
+    assert "refusing" in reason
