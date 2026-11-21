@@ -109,6 +109,55 @@ def _check_state_db() -> dict:
     return report
 
 
+def _check_publish_approval() -> dict:
+    """
+    Report whether anything could actually be published right now.
+
+    Informational, never blocking. With no approvers configured, publishing is
+    structurally impossible — which is the intended safe default, not a fault.
+    Reporting it as blocking would fail CI on the default configuration, and
+    the pipeline's own approval gate already handles the operational case.
+
+    The point is that "RESULT: READY" otherwise reads as "ready to publish",
+    and it is not: the pipeline can research, script, render and pass QA while
+    publication stays impossible. An operator should be able to see that here.
+    """
+    import os
+
+    from agent.modules import approvals
+
+    allowlist = approvals.approvers()
+    token_set = bool((os.environ.get("SHORTS_APPROVAL_TOKEN") or "").strip())
+
+    report = {
+        "approvers": len(allowlist),
+        "token_configured": token_set,
+        "ttl_s": approvals.ttl_seconds(),
+    }
+
+    if allowlist and token_set:
+        report["can_grant"] = True
+        report["note"] = (
+            f"{len(allowlist)} approver(s) configured; approvals can be granted "
+            f"via scripts/approve_video.py and live for {approvals.ttl_seconds()}s."
+        )
+        return report
+
+    missing = []
+    if not allowlist:
+        missing.append("SHORTS_APPROVER_ALLOWLIST")
+    if not token_set:
+        missing.append("SHORTS_APPROVAL_TOKEN")
+    report["can_grant"] = False
+    report["note"] = (
+        "no approval can be granted (" + ", ".join(missing) + " unset), so "
+        "nothing can be published. This is the safe default until a real "
+        "approval mechanism exists; it does not block the pipeline from "
+        "research, scripting, rendering or QA."
+    )
+    return report
+
+
 def _check_state_db_connected() -> dict:
     from agent.modules import db, db_pg
 
@@ -128,6 +177,7 @@ def run(strict: bool = False, connect: bool = False) -> dict:
         "registry": _check_registry(),
         "routing": None,
         "state_db": _check_state_db(),
+        "publish_approval": _check_publish_approval(),
     }
     report["routing"] = _check_routing(report["credentials"])
 
@@ -208,6 +258,15 @@ def print_human(report: dict) -> None:
         print(f"  connect ok={conn.get('ok')} tables={conn.get('tables')}")
         if conn.get("missing_tables"):
             print(f"  missing tables: {conn['missing_tables']}")
+
+    approval = report.get("publish_approval")
+    if approval:
+        print("\nPublishing approval")
+        print(f"  approvers        : {approval['approvers']}")
+        print(f"  token configured : {approval['token_configured']}")
+        print(f"  can grant        : {approval['can_grant']}")
+        print(f"  ttl              : {approval['ttl_s']}s")
+        print(f"  note             : {approval['note']}")
 
     print(f"\nBlocking issues: {len(report['blocking'])}")
     for item in report["blocking"]:

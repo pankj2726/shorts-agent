@@ -434,3 +434,75 @@ def test_approvals_table_exists_in_both_dialects(tmp_path, monkeypatch):
     assert "approvals" in names
     assert "approvals" in db_pg.EXPECTED_TABLES
     assert "shorts.approvals" in db_pg.SCHEMA_DDL
+
+
+# ─── preflight must not hide the publishing state behind READY ───────────────
+
+
+def _preflight_approval():
+    """The publish_approval section of a preflight run."""
+    import importlib
+    import sys
+    from pathlib import Path
+
+    scripts = Path(__file__).resolve().parent.parent / "scripts"
+    if str(scripts) not in sys.path:
+        sys.path.insert(0, str(scripts))
+    preflight = importlib.import_module("preflight")
+    return preflight._check_publish_approval()
+
+
+def test_preflight_reports_that_nothing_can_be_published_by_default():
+    """
+    The default configuration must say so plainly.
+
+    "RESULT: READY" otherwise reads as "ready to publish". The pipeline can
+    research, script, render and pass QA while publication stays impossible,
+    and an operator should be able to see that without reading the code.
+    """
+    report = _preflight_approval()
+    assert report["can_grant"] is False
+    assert report["approvers"] == 0
+    assert report["token_configured"] is False
+    assert "nothing can be published" in report["note"]
+
+
+def test_preflight_reports_a_partially_configured_allowlist(monkeypatch):
+    """Half a configuration is still no configuration."""
+    monkeypatch.setenv("SHORTS_APPROVER_ALLOWLIST", IDENTITY)
+    report = _preflight_approval()
+    assert report["can_grant"] is False
+    assert report["approvers"] == 1
+    assert "SHORTS_APPROVAL_TOKEN" in report["note"]
+
+
+def test_preflight_reports_a_fully_configured_approver(monkeypatch):
+    monkeypatch.setenv("SHORTS_APPROVER_ALLOWLIST", f"{IDENTITY}, second@example.com")
+    monkeypatch.setenv("SHORTS_APPROVAL_TOKEN", TOKEN)
+    report = _preflight_approval()
+    assert report["can_grant"] is True
+    assert report["approvers"] == 2
+    assert "approve_video.py" in report["note"]
+
+
+def test_approval_readiness_never_blocks_preflight(monkeypatch):
+    """
+    It must stay informational.
+
+    Making it blocking would fail CI on the default configuration, where no
+    approvers are set — which is the intended safe state, not a fault.
+    """
+    import importlib
+    import sys
+    from pathlib import Path
+
+    scripts = Path(__file__).resolve().parent.parent / "scripts"
+    if str(scripts) not in sys.path:
+        sys.path.insert(0, str(scripts))
+    preflight = importlib.import_module("preflight")
+
+    report = preflight.run()
+    assert "publish_approval" in report
+    assert report["publish_approval"]["can_grant"] is False
+    for item in report["blocking"]:
+        assert "approval" not in item.lower()
