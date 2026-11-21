@@ -42,9 +42,14 @@ jobs:
       - name: Lint — critical errors (repo-wide)
         run: ruff check agent scripts tests --select E9,F63,F7,F82 --output-format=github
 
-      - name: Lint — full ruleset (router, state store, preflight, tests)
+      # agent/modules/publish.py is deliberately absent: it carries 7
+      # pre-existing findings (unused json/time imports, Optional[...] aliases,
+      # a broad except) that predate the approval work. Adding it would fail
+      # this step on debt unrelated to this PR.
+      - name: Lint — full ruleset (router, state store, approvals, preflight, tests)
         run: |
           ruff check agent/router.py agent/modules/db.py agent/modules/db_pg.py \
+                     agent/modules/approvals.py scripts/approve_video.py \
                      scripts/preflight.py tests --output-format=github
 
       - name: Unit tests
