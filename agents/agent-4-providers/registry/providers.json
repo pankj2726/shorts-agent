@@ -26,7 +26,7 @@
     "privacy_note": "Free-tier content may be used by Google to improve models — verify before uploading user data",
     "health": "ok",
     "fallback_model": null,
-    "last_verified": "2026-11-23",
+    "last_verified": "2026-11-24",
     "known_limitations": [
       "Free-tier data may be used for model training",
       "Rate limits model-specific — check account dashboard"
@@ -60,7 +60,7 @@
     "privacy_policy_reviewed": false,
     "health": "ok",
     "fallback_model": null,
-    "last_verified": "2026-11-23",
+    "last_verified": "2026-11-24",
     "known_limitations": [
       "50 requests/day hard cap on free tier",
       "Model availability changes frequently"
@@ -102,7 +102,7 @@
     "privacy_policy_reviewed": false,
     "health": "ok",
     "fallback_model": null,
-    "last_verified": "2026-11-23",
+    "last_verified": "2026-11-24",
     "known_limitations": [
       "llama-3.1-70b-versatile deprecated — do not use",
       "Rate limits are account-specific, not plan-generic"
@@ -160,7 +160,7 @@
     "privacy_policy_reviewed": false,
     "health": "ok",
     "fallback_model": "procedural-gradient-local",
-    "last_verified": "2026-11-23",
+    "last_verified": "2026-11-24",
     "known_limitations": [
       "402 errors on burst requests (3 of 4 keywords failed in Phase 3 test)",
       "No guaranteed SLA",
@@ -191,7 +191,7 @@
     "privacy_policy_reviewed": false,
     "health": "ok",
     "fallback_model": "pyttsx3-local",
-    "last_verified": "2026-11-23",
+    "last_verified": "2026-11-24",
     "known_limitations": [
       "API changed: use boundary=WordBoundary + sub_maker.feed() + get_srt()",
       "pyttsx3 fallback produces very quiet audio (-17.5 LUFS) — neural preferred"
