@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-25T08:39:14+00:00",
+  "generated_at": "2026-11-25T21:44:55+00:00",
   "dry_run": false,
   "probe_timeout_s": 15,
   "results": [
@@ -9,7 +9,7 @@
       "status_code": 200,
       "reason": "",
       "endpoint": "https://generativelanguage.googleapis.com/v1beta/models",
-      "latency_ms": 103,
+      "latency_ms": 213,
       "provider": "google-gemini",
       "previous_health": "ok"
     },
@@ -19,7 +19,7 @@
       "status_code": 200,
       "reason": "",
       "endpoint": "https://openrouter.ai/api/v1/models",
-      "latency_ms": 169,
+      "latency_ms": 48,
       "provider": "openrouter",
       "previous_health": "ok"
     },
@@ -29,7 +29,7 @@
       "status_code": 200,
       "reason": "",
       "endpoint": "https://api.groq.com/openai/v1/models",
-      "latency_ms": 134,
+      "latency_ms": 69,
       "provider": "groq",
       "previous_health": "ok"
     },
@@ -45,7 +45,7 @@
       "status_code": 200,
       "reason": "",
       "endpoint": "https://pollinations.ai/",
-      "latency_ms": 70,
+      "latency_ms": 80,
       "provider": "pollinations-ai",
       "previous_health": "ok"
     },
@@ -54,7 +54,7 @@
       "health": "ok",
       "reason": "",
       "voices": 318,
-      "latency_ms": 288,
+      "latency_ms": 895,
       "provider": "edge-tts",
       "previous_health": "ok"
     },
